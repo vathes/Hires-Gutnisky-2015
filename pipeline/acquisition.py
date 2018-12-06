@@ -15,6 +15,14 @@ class ExperimentType(dj.Lookup):
         ['behavior'], ['extracelluar'], ['photostim']
     ]
 
+@schema 
+class RecordingLocation(dj.Lookup): # this certainly is a horrible name
+    definition = """
+    -> reference.BrainLocation
+    recording_depth: float # depth in um    # this is a tricky design, should depth unit be kept separately? is um the standardized unit in this field?
+    """
+
+
 @schema
 class PhotoStim(dj.Manual):
     definition = """
@@ -34,10 +42,12 @@ class PhotoStim(dj.Manual):
 class Session(dj.Manual):
     definition = """
     -> subject.Subject
+    -> reference.Cell
     session_time: datetime    # session time
     ---
-    session_directory: varchar(256)
-    session_note: varchar(256) # 
+    -> RecordingLocation
+    session_directory = NULL: varchar(256)
+    session_note = NULL : varchar(256) # 
     """
 
     class Experimenter(dj.Part):

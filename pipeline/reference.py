@@ -7,15 +7,26 @@ schema = dj.schema('ttngu207_reference',locals())
 
 
 @schema
-class BrainLocation(dj.Lookup):
+class CorticalLayer(dj.Lookup):
     definition = """
-    brain_location: varchar(24)
+    cortical_layer = 'N/A' : enum('N/A','1','2','3','4','5','6','2/3','3/4','4/5','5/6')
     ---
-    brain_location_full_name: varchar(128)
+    """
+    contents = [['N/A'],['1'],['2'],['3'],['4'],['5'],['6'],['2/3'],['3/4'],['4/5'],['5/6']]
+
+@schema
+class BrainLocation(dj.Lookup):
+    definition = """ 
+    brain_location: varchar(32)
+    brain_subregion = 'N/A' : varchar(32)
+    -> CorticalLayer
+    ---
+    brain_location_full_name = 'N/A' : varchar(128)
     """
     contents = [
-        ['Fastigial', 'Cerebellar fastigial nucleus'],
-        ['ALM', 'Anteriror lateral motor cortex']
+        {'brain_location':'fastigial','brain_location_full_name':'cerebellar fastigial nucleus','cortical_layer': 'N/A', 'brain_subregion':'N/A'},
+        {'brain_location':'alm','brain_location_full_name':'anteriror lateral motor cortex','cortical_layer': 'N/A', 'brain_subregion':'N/A'},
+        {'brain_location':'barrel','brain_location_full_name':'N/A','cortical_layer': '4', 'brain_subregion':'c2'}
     ]
 
 @schema
@@ -87,6 +98,14 @@ class Whisker(dj.Lookup):
     """
     contents = [['full'], ['C2']]
     
+@schema
+class Cell(dj.Lookup):
+    definition = """
+    cell_id: varchar(64)
+    ---
+    cell_type: enum('Excitatory','Inhibitory')
+    
+    """    
     
     
 @schema

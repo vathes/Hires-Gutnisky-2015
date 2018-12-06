@@ -19,7 +19,7 @@ class Strain(dj.Lookup):
     definition = """
     strain: varchar(24)
     """
-    contents = [['000664']]
+    contents = [['000664'],['N/A']]
 
 @schema
 class Allele(dj.Lookup):
@@ -39,8 +39,8 @@ class Subject(dj.Manual):
     -> Species
     -> Strain
     -> reference.AnimalSource
-    sex: enum('M', 'F', 'U')
-    date_of_birth: date
+    sex = 'U': enum('M', 'F', 'U')
+    date_of_birth = NULL: date
     """
 
 @schema
@@ -51,3 +51,13 @@ class SubjectAllele(dj.Manual):
     ---
     zygosity:  enum('Homozygous', 'Heterozygous', 'Negative', 'Unknown')
     """
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
