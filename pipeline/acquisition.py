@@ -65,29 +65,30 @@ class Session(dj.Manual):
 @schema
 class Acquisition(dj.Manual):
     definition = """
-    -> Session
-    ---
-    
+    -> Session   
     """
-    class Behavior(dj.Part):
-        definition = """
-        -> master
-        -> reference.BehavioralType
-        ---
-        behavior_sampling_rate: int
-        behavior_time_stamp: longblob
-        behavior_timeseries: longblob        
-        """    
-        
-    class Ephys(dj.Part):
-        definition = """
-        -> master
-        -> reference.EphysType
-        ---
-        ephys_sampling_rate: int
-        ephys_time_stamp: longblob
-        ephys_timeseries: longblob        
-        """      
+    
+@schema
+class Behavior(dj.Part):
+    definition = """
+    -> Session
+    -> reference.BehavioralType
+    ---
+    behavior_sampling_rate: int
+    behavior_time_stamp: longblob
+    behavior_timeseries: longblob        
+    """    
+    
+@schema
+class Ephys(dj.Part):
+    definition = """
+    -> Session
+    -> reference.EphysType
+    ---
+    ephys_sampling_rate: int
+    ephys_time_stamp: longblob
+    ephys_timeseries: longblob        
+    """      
         
         
 #@schema
