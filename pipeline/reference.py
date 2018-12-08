@@ -103,7 +103,7 @@ class Cell(dj.Lookup):
     definition = """
     cell_id: varchar(64)
     ---
-    cell_type: enum('Excitatory','Inhibitory')
+    cell_type: enum('excitatory','inhibitory')
     
     """    
     

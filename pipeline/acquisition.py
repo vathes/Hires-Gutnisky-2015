@@ -1,8 +1,17 @@
 '''
 Schema of aquisition information.
 '''
+import re
+import os
+from datetime import datetime
+import numpy as np
+import scipy.io as sio
+import datajoint as dj
+from pipeline.helper_functions import Get1FromNestedArray, GetListFromNestedArray, _datetimeformat_ydm, _datetimeformat_ymd
+
 import datajoint as dj
 from pipeline import reference, subject
+
 
 schema = dj.schema('ttngu207_acquisition',locals())
 

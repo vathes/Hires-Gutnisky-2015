@@ -1,8 +1,14 @@
 '''
 Schema of session information.
 '''
+import re
+import os
+from datetime import datetime
+import numpy as np
+import scipy.io as sio
 import datajoint as dj
 from pipeline import acquisition
+from pipeline.helper_functions import Get1FromNestedArray, GetListFromNestedArray, _datetimeformat_ydm, _datetimeformat_ymd
 
 schema = dj.schema('ttngu207_behavior',locals())
 
@@ -51,20 +57,36 @@ class TrialSet(dj.Imported):
         
         datadir = 'C://Users//thinh//Documents//TN-Vathes//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//'
         sessdatadir = datadir + 'datafiles//'
-
-        sessdatafile = 'data_structure_Cell'    
+        sessdatafiles = os.listdir(sessdatadir)
+                
+        # Get the Session definition from keys
+        animal_id = key['subject_id']
+        cell = key['cell_id']
+        date_of_experiment = key['session_time']
+                
+        # Convert datetime to string format 
+        date_of_experiment = datetime.strftime(date_of_experiment,_datetimeformat_ymd) # expected datetime format: yymmdd
         
-        print(sessdatafile)
+        # Search the filenames to find a match for "this" session (based on key)
+        sessdatafile = None
+        for s in sessdatafiles:
+            m1 = re.search(animal_id, s) 
+            m2 = re.search(cell, s) 
+            m3 = re.search(date_of_experiment, s) 
+            if (m1 is not None) & (m2 is not None) & (m3 is not None):
+                sessdatafile = s
+                break
+        
+        # If session not found from dataset, break
+        if sessdatafile is None:
+            print(f'Session not found! - Subject: {animal_id} - Cell: {cell} - Date: {date_of_experiment}')
+            return
+        else: print(f'Found datafile: {sessdatafile}')
+        
+        # Now read the data and start ingesting
         matfile = sio.loadmat(sessdatadir+sessdatafile, struct_as_record=False)
         sessdata = matfile['c'][0,0]
-        header = re.split('_|\.',sessdatafile)
         
-        animal_ID = header[3]
-        date_of_experiment = header[4]
-        cell = header[5]+'_'+header[6]
-        
-        animalId = Get1FromNestedArray(sessdata.animalId)
-        sessdate = Get1FromNestedArray(sessdata.date)
         timeUnitIds = GetListFromNestedArray(sessdata.timeUnitIds)
         timeUnitNames = GetListFromNestedArray(sessdata.timeUnitNames)
         timesUnitDict = {}
@@ -91,54 +113,49 @@ class TrialSet(dj.Imported):
         behav = timeSeries.value[0,0][0,0]
         ephys = timeSeries.value[0,1][0,0]
         
-        
-        # ------------ TrialSet ------------
-        if date_of_experiment is not None : 
-            try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ymd) # expected datetime format: yymmdd
-            except:
-                try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ydm) # in case some dataset has messed up format: yyddmm
-                except: date_of_experiment = None, print('Session Date error at: ' + date_of_experiment) # let's hope this doesn't happen
-        
-        
-        TrialSet = behavior.TrialSet()
-        
-        behavior.TrialSet.connection.start_transaction()
-        
-        behavior.TrialSet.insert1(            
-                            {'subject_id':animal_ID,
-                             'cell_id':cell,
-                             'session_time': date_of_experiment,
-                             'trial_time_unit': timesUnitDict[trialTimeUnit],
-                             'number_of_trials':len(trialIds)
-                             }, 
-                             skip_duplicates=True)
+                
+        part_key = key.copy() # this is to perserve the original key for use in the part table later
+        # form new key-values pair and insert key
+        key['trial_time_unit'] = timesUnitDict[trialTimeUnit]
+        key['number_of_trials'] = len(trialIds)
+        self.insert1(key)
+        print(f'Inserted trial set for session: Subject: {animal_id} - Cell: {cell} - Date: {date_of_experiment}')
         
         for idx, trialId in enumerate(trialIds):
+            
+            ### Debug here
+            tmp = behav.trial[0,:]
+            print('---')
+            print(trialId)
+            print(tmp)            
+            ###
+            
             tType = trialTypeMat[:,idx]
             tType = np.where(tType == 1)[0]
             tType = trialTypeStr[tType.item(0)] # this relies on the metadata consistency, e.g. a trial belongs to only 1 category of trial type
-        
-            this_trial_sample_idx = np.where(behav.trial[0,:] == (idx+1))[0] #  (+1) to take in to account that the native data format is MATLAB (index starts at 1)
             
+            try:
+                this_trial_sample_idx = np.where(behav.trial[0,:] == trialId)[0] #  
+            except: # this implementation is a safeguard against inconsistency in data formatting - e.g. "data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat" where "trial" vector is not referencing trialId
+                this_trial_sample_idx = np.where(behav.trial[0,:] == (idx+1))[0] #  (+1) to take in to account that the native data format is MATLAB (index starts at 1)
             
-            behavior.TrialSet.Trial.insert1(            
-                            {'subject_id':animal_ID,
-                             'cell_id':cell,
-                             'session_time': date_of_experiment,
-                             'trial_idx':trialId,
-                             'trial_type':tType,
-                             'pole_trial_condition': poleTrialCondition[idx],
-                             'pole_position': polePos[idx],
-                             'pole_in_time': poleInTime[idx],
-                             'pole_out_time': poleOutTime[idx],
-                             'lick_time': lickTime[0,idx],
-                             'start_sample': this_trial_sample_idx[0],
-                             'end_sample': this_trial_sample_idx[-1]
-                             }, 
-                             skip_duplicates=True)
+            # form new key-values pair for part_key and insert
+            part_key['trial_idx'] = trialId
+            part_key['trial_type'] = tType
+            part_key['pole_trial_condition'] = poleTrialCondition[idx]
+            part_key['pole_position'] = polePos[idx]
+            part_key['pole_in_time'] = poleInTime[idx]
+            part_key['pole_out_time'] = poleOutTime[idx]
+            part_key['lick_time'] = lickTime[0,idx]
+            part_key['start_sample'] = this_trial_sample_idx[0]
+            part_key['end_sample'] = this_trial_sample_idx[-1]
+            self.Trial.insert1(part_key)
+            print(f'Inserted trial ID: {trialId}')
+            
         
-        
-        
+
+
+
         
         
 

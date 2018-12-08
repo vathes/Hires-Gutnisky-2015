@@ -5,15 +5,13 @@ import os
 from datetime import datetime
 import re
 
+from pipeline.helper_functions import Get1FromNestedArray, GetListFromNestedArray, _datetimeformat_ydm, _datetimeformat_ymd
+
 ############## Dataset #################
 
 datadir = 'C://Users//thinh//Documents//TN-Vathes//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//'
 metadatadir = datadir + 'metadata//'
 sessdatadir = datadir + 'datafiles//'
-
-# Set up 
-_datetimeformat_ymd = '%y%m%d'
-_datetimeformat_ydm = '%y%d%m'
 
 #################################
 import datajoint as dj
@@ -23,30 +21,9 @@ import pipeline
 from pipeline import reference, subject, acquisition, behavior, ephys, action
 
 all_erd = dj.ERD(reference) + dj.ERD(subject) + dj.ERD(action) + dj.ERD(acquisition) + dj.ERD(behavior) + dj.ERD(ephys)
-all_erd.save('./all_erd.png')
+all_erd.save('./images/all_erd.png')
 
 ############## INGESTION #################
-
-# ==== Part 0: helper functions ========
-def Get1FromNestedArray(nestedArray):
-    if nestedArray.size == 0: return None
-    unpackedVal = nestedArray
-    while unpackedVal.shape != (): 
-        if unpackedVal.size == 0: return None
-        unpackedVal = unpackedVal[0]
-    return unpackedVal
-
-def GetListFromNestedArray(nestedArray):
-    if nestedArray.size == 0: return None
-    unpackedVal = nestedArray
-    l = []
-    if unpackedVal.size == 0: return None
-    for j in np.arange(unpackedVal.size):
-        tmp = unpackedVal.item(j)
-        try: tmp = Get1FromNestedArray(tmp)
-        except: pass
-        l.append(tmp)            
-    return l    
 
 # ===================== Part 1: metadata ========
 
@@ -56,7 +33,7 @@ for metadatafile in metadatafiles:
     matfile = sio.loadmat(metadatadir+metadatafile, struct_as_record=False)
     metadata = matfile['meta_data'][0,0]
     
-    animal_ID = Get1FromNestedArray(metadata.animal_ID)                    # subject.Subject
+    animal_ID = Get1FromNestedArray(metadata.animal_ID).upper()            # subject.Subject # .upper() here to handle some inconsistencies in the dataset
     animal_background = Get1FromNestedArray(metadata.animal_background)    # empty
     cell = Get1FromNestedArray(metadata.cell)                              # reference.Cell
     dob = Get1FromNestedArray(metadata.data_of_birth)                      # subject.Subject
@@ -172,7 +149,7 @@ for metadatafile in metadatafiles:
     # ------------ Cell ------------
     
     # handling some inconsistency in cell naming convention in the metadata
-    if cell[-5:] != '_AAAA': cell = cell + '_AAAA'
+    if len(cell) < 7 : cell = cell + '_AAAA'
     
     reference.Cell.insert1([cell, cell_type],skip_duplicates=True)
     
@@ -232,6 +209,7 @@ for metadatafile in metadatafiles:
                      skip_duplicates=True)
         # there is still the ExperimentType part table here...
         acquisition.Session.connection.commit_transaction()
+        print(f'\tSession created - Subject: {animal_ID} - Cell: {cell} - Date: {date_of_experiment}')
     
     
     ## Need to perform ingestion for Virus, VirusInjection and PhotoStim ##
@@ -240,93 +218,7 @@ for metadatafile in metadatafiles:
 
 # ===================== Part 2: Acquisition data (still in experimental stage) ========
 
-sessdatafiles = os.listdir(sessdatadir)
-sessdatafile = sessdatafiles[0]    
-
-print(sessdatafile)
-matfile = sio.loadmat(sessdatadir+sessdatafile, struct_as_record=False)
-sessdata = matfile['c'][0,0]
-header = re.split('_|\.',sessdatafile)
-
-animal_ID = header[3]
-date_of_experiment = header[4]
-cell = header[5]+'_'+header[6]
-
-animalId = Get1FromNestedArray(sessdata.animalId)
-sessdate = Get1FromNestedArray(sessdata.date)
-timeUnitIds = GetListFromNestedArray(sessdata.timeUnitIds)
-timeUnitNames = GetListFromNestedArray(sessdata.timeUnitNames)
-timesUnitDict = {}
-for idx, val in enumerate(timeUnitIds):
-    timesUnitDict[val] = timeUnitNames[idx]
-
-trialIds = GetListFromNestedArray(sessdata.trialIds)
-trialStartTimes = GetListFromNestedArray(sessdata.trialStartTimes)
-trialTimeUnit = Get1FromNestedArray(sessdata.trialTimeUnit)
-trialTypeMat = sessdata.trialTypeMat
-trialTypeStr = GetListFromNestedArray(sessdata.trialTypeStr)
-
-trialPropertiesHash = sessdata.trialPropertiesHash[0,0]
-descr = GetListFromNestedArray(trialPropertiesHash.descr)
-keyNames = GetListFromNestedArray(trialPropertiesHash.keyNames)
-value = trialPropertiesHash.value
-polePos = GetListFromNestedArray(value[0,0])
-poleInTime = GetListFromNestedArray(value[0,1])
-poleOutTime = GetListFromNestedArray(value[0,2])
-lickTime = value[0,3]
-poleTrialCondition = GetListFromNestedArray(value[0,4])
-
-timeSeries = sessdata.timeSeriesArrayHash[0,0]
-behav = timeSeries.value[0,0][0,0]
-ephys = timeSeries.value[0,1][0,0]
-
-
-# ------------ TrialSet ------------
-if date_of_experiment is not None : 
-    try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ymd) # expected datetime format: yymmdd
-    except:
-        try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ydm) # in case some dataset has messed up format: yyddmm
-        except: date_of_experiment = None, print('Session Date error at: ' + date_of_experiment) # let's hope this doesn't happen
-
-
-TrialSet = behavior.TrialSet()
-
-behavior.TrialSet.connection.start_transaction()
-
-behavior.TrialSet.insert1(            
-                    {'subject_id':animal_ID,
-                     'cell_id':cell,
-                     'session_time': date_of_experiment,
-                     'trial_time_unit': timesUnitDict[trialTimeUnit],
-                     'number_of_trials':len(trialIds)
-                     }, 
-                     skip_duplicates=True)
-
-for idx, trialId in enumerate(trialIds):
-    tType = trialTypeMat[:,idx]
-    tType = np.where(tType == 1)[0]
-    tType = trialTypeStr[tType.item(0)] # this relies on the metadata consistency, e.g. a trial belongs to only 1 category of trial type
-
-    this_trial_sample_idx = np.where(behav.trial[0,:] == (idx+1))[0] #  (+1) to take in to account that the native data format is MATLAB (index starts at 1)
-    
-    
-    behavior.TrialSet.Trial.insert1(            
-                    {'subject_id':animal_ID,
-                     'cell_id':cell,
-                     'session_time': date_of_experiment,
-                     'trial_idx':trialId,
-                     'trial_type':tType,
-                     'pole_trial_condition': poleTrialCondition[idx],
-                     'pole_position': polePos[idx],
-                     'pole_in_time': poleInTime[idx],
-                     'pole_out_time': poleOutTime[idx],
-                     'lick_time': lickTime[0,idx],
-                     'start_sample': this_trial_sample_idx[0],
-                     'end_sample': this_trial_sample_idx[-1]
-                     }, 
-                     skip_duplicates=True)
-
-
+behavior.TrialSet.populate()
 
 
 
