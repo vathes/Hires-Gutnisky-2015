@@ -34,7 +34,7 @@ class Allele(dj.Lookup):
 @schema
 class Subject(dj.Manual):
     definition = """
-    subject_id: varchar(64)  # id of the subject (e.g. "ANM244028")
+    subject_id: varchar(64)  # id of the subject (e.g. ANM244028)
     ---
     -> Species
     -> Strain

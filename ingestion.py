@@ -32,7 +32,7 @@ all_erd.save('./images/all_erd.png')
 meta_data_files = os.listdir(meta_data_dir)
 for metadatafile in meta_data_files:    
     print(metadatafile)
-    matfile = sio.loadmat(meta_data_dir+metadatafile, struct_as_record=False)
+    matfile = sio.loadmat(os.path.join(meta_data_dir,metadatafile), struct_as_record=False)
     metadata = matfile['meta_data'][0,0]
     
     animal_ID = get_one_from_nested_array(metadata.animal_ID).upper()            # subject.Subject # .upper() here to handle some inconsistencies in the dataset
@@ -149,7 +149,7 @@ for metadatafile in meta_data_files:
     # handling some inconsistency in cell naming convention in the metadata
     if len(cell) < 7 : cell = cell + '_AAAA'
     
-    reference.Cell.insert1(
+    subject.Cell.insert1(
             {'subject_id':animal_ID,
              'cell_id':cell, 
              'cell_type':cell_type},
@@ -181,7 +181,7 @@ for metadatafile in meta_data_files:
     
     # ------------ Session ------------        
     if date_of_experiment is not None: 
-        with acquisition.Session.connection.start_transaction():
+        with acquisition.Session.connection.transaction:
             acquisition.Session.insert1(            
                         {'subject_id':animal_ID,
                          'cell_id':cell,
@@ -200,7 +200,6 @@ for metadatafile in meta_data_files:
                          }, 
                          skip_duplicates=True)
             # there is still the ExperimentType part table here...
-            acquisition.Session.connection.commit_transaction()
             print(f'\tSession created - Subject: {animal_ID} - Cell: {cell} - Date: {date_of_experiment}')
     
     

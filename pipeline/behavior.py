@@ -51,7 +51,7 @@ class TrialSet(dj.Imported):
 
     def _make_tuples(self,key):
         
-        data_dir = os.path.abspath('..//..//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//')
+        data_dir = os.path.abspath('..//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//')
         sess_data_dir = os.path.join(data_dir,'datafiles')
         
         sess_data_files = os.listdir(sess_data_dir)
@@ -81,7 +81,7 @@ class TrialSet(dj.Imported):
         else: print(f'Found datafile: {sess_data_file}')
         
         # Now read the data and start ingesting
-        matfile = sio.loadmat(sess_data_dir+sess_data_file, struct_as_record=False)
+        matfile = sio.loadmat(os.path.join(sess_data_dir,sess_data_file), struct_as_record=False)
         sessdata = matfile['c'][0,0]
         
         timeUnitIds = get_list_from_nested_array(sessdata.timeUnitIds)
@@ -100,11 +100,11 @@ class TrialSet(dj.Imported):
         descr = get_list_from_nested_array(trialPropertiesHash.descr)
         keyNames = get_list_from_nested_array(trialPropertiesHash.keyNames)
         value = trialPropertiesHash.value
-        polePos = get_list_from_nested_array(value[0,0]) # this is in microstep
+        polePos = np.array(get_list_from_nested_array(value[0,0])) # this is in microstep
         polePos = polePos * 0.0992 # convert to micron here  (0.0992 microns / microstep)
-        poleInTime = get_list_from_nested_array(value[0,1])
+        poleInTime = np.array(get_list_from_nested_array(value[0,1]))
         poleOutTime = get_list_from_nested_array(value[0,2])
-        lickTime = value[0,3]
+        lickTime = np.array(value[0,3])
         poleTrialCondition = get_list_from_nested_array(value[0,4])
         
         timeSeries = sessdata.timeSeriesArrayHash[0,0]
@@ -115,10 +115,10 @@ class TrialSet(dj.Imported):
         part_key = key.copy() # this is to perserve the original key for use in the part table later
         # form new key-values pair and insert key
         key['trial_time_unit'] = timesUnitDict[trialTimeUnit]
-        key['number_of_trials'] = len(trialIds)
+        key['n_trials'] = len(trialIds)
         self.insert1(key)
         print(f'Inserted trial set for session: Subject: {animal_id} - Cell: {cell} - Date: {date_of_experiment}')
-        
+        print('Inserting trial ID: ', end="")
         for idx, trialId in enumerate(trialIds):
             
             ### Debug here
@@ -149,8 +149,8 @@ class TrialSet(dj.Imported):
             part_key['start_sample'] = this_trial_sample_idx[0]
             part_key['end_sample'] = this_trial_sample_idx[-1]
             self.Trial.insert1(part_key)
-            print(f'Inserted trial ID: {trialId}')
-            
+            print(f'{trialId} ',end="")
+        print('')
         
 
 

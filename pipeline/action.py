@@ -16,11 +16,11 @@ class Weighing(dj.Manual):
     """
 
 @schema
-class WhiskerConfig(dj.Manual):
+class SubjectWhiskerConfig(dj.Manual):
     definition = """
     -> subject.Subject
     ---
-    -> reference.Whisker
+    -> reference.WhiskerConfig
     """
 
 @schema
