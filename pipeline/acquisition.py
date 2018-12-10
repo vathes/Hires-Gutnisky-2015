@@ -24,8 +24,8 @@ class ExperimentType(dj.Lookup):
     ]
 
 @schema 
-class RecordingLocation(dj.Lookup): 
-    definition = """
+class RecordingLocation(dj.Manual): 
+    definition = """ 
     -> reference.BrainLocation
     recording_depth: float # depth in um    
     """
