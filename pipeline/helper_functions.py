@@ -1,10 +1,11 @@
 import numpy as np
+from datetime import datetime
 
 # datetime format - should probably read this from a config file and not hard coded here
-_datetimeformat_ymd = '%y%m%d'
-_datetimeformat_ydm = '%y%d%m'
+datetimeformat_ymd = '%y%m%d'
+datetimeformat_ydm = '%y%d%m'
 
-def Get1FromNestedArray(nestedArray):
+def get_one_from_nested_array(nestedArray):
     if nestedArray.size == 0: return None
     unpackedVal = nestedArray
     while unpackedVal.shape != (): 
@@ -12,14 +13,29 @@ def Get1FromNestedArray(nestedArray):
         unpackedVal = unpackedVal[0]
     return unpackedVal
 
-def GetListFromNestedArray(nestedArray):
+def get_list_from_nested_array(nestedArray):
     if nestedArray.size == 0: return None
     unpackedVal = nestedArray
     l = []
     if unpackedVal.size == 0: return None
     for j in np.arange(unpackedVal.size):
         tmp = unpackedVal.item(j)
-        try: tmp = Get1FromNestedArray(tmp)
+        try: tmp = get_one_from_nested_array(tmp)
         except: pass
         l.append(tmp)            
     return l    
+
+def extract_datetime(datetime_str):
+    if datetime_str is None : 
+        return None
+    else: 
+        try: 
+            # expected datetime format: yymmdd
+            return datetime.strptime(str(datetime_str),datetimeformat_ymd) 
+        except:
+            # in case some dataset has messed up format: yyddmm
+            try:
+                return datetime.strptime(str(datetime_str),datetimeformat_ydm) 
+            except: 
+                print(f'Session Date error at {datetime_str}') # let's hope this doesn't happen
+                return None

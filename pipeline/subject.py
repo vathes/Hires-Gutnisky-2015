@@ -2,7 +2,7 @@
 Schema of subject information.
 '''
 import datajoint as dj
-from pipeline import reference
+from . import reference
 
 schema = dj.schema('ttngu207_subject',locals())
 
@@ -34,7 +34,7 @@ class Allele(dj.Lookup):
 @schema
 class Subject(dj.Manual):
     definition = """
-    subject_id: varchar(64)  # name of the subject
+    subject_id: varchar(64)  # id of the subject (e.g. "ANM244028")
     ---
     -> Species
     -> Strain
@@ -42,6 +42,15 @@ class Subject(dj.Manual):
     sex = 'U': enum('M', 'F', 'U')
     date_of_birth = NULL: date
     """
+    
+@schema
+class Cell(dj.Manual):
+    definition = """
+    -> Subject
+    cell_id: varchar(64)
+    ---
+    cell_type: enum('excitatory','inhibitory')
+    """    
 
 @schema
 class SubjectAllele(dj.Manual):

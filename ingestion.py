@@ -5,21 +5,23 @@ import os
 from datetime import datetime
 import re
 
-from pipeline.helper_functions import Get1FromNestedArray, GetListFromNestedArray, _datetimeformat_ydm, _datetimeformat_ymd
+from pipeline.helper_functions import get_one_from_nested_array, extract_datetime
 
 ############## Dataset #################
-
-datadir = 'C://Users//thinh//Documents//TN-Vathes//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//'
-metadatadir = datadir + 'metadata//'
-sessdatadir = datadir + 'datafiles//'
+# (this needs to be placed in a config file somewhere)
+data_dir = os.path.abspath('..//NWB_Janelia_datasets//crcns_ssc5_data_HiresGutnisky2015//')
+meta_data_dir = os.path.join(data_dir,'metadata')
+sess_data_dir = os.path.join(data_dir,'datafiles')
 
 #################################
 import datajoint as dj
-dj.config['database.host'] = 'tutorial-db.datajoint.io'
+
+dj.config['database.host'] = 'tutorial-db.datajoint.io' # this goes to config file as well
 
 import pipeline
 from pipeline import reference, subject, acquisition, behavior, ephys, action
 
+# Merge all schema and generate the overall ERD (then save in "/images")
 all_erd = dj.ERD(reference) + dj.ERD(subject) + dj.ERD(action) + dj.ERD(acquisition) + dj.ERD(behavior) + dj.ERD(ephys)
 all_erd.save('./images/all_erd.png')
 
@@ -27,47 +29,50 @@ all_erd.save('./images/all_erd.png')
 
 # ===================== Part 1: metadata ========
 
-metadatafiles = os.listdir(metadatadir)
-for metadatafile in metadatafiles:    
+meta_data_files = os.listdir(meta_data_dir)
+for metadatafile in meta_data_files:    
     print(metadatafile)
-    matfile = sio.loadmat(metadatadir+metadatafile, struct_as_record=False)
+    matfile = sio.loadmat(meta_data_dir+metadatafile, struct_as_record=False)
     metadata = matfile['meta_data'][0,0]
     
-    animal_ID = Get1FromNestedArray(metadata.animal_ID).upper()            # subject.Subject # .upper() here to handle some inconsistencies in the dataset
-    animal_background = Get1FromNestedArray(metadata.animal_background)    # empty
-    cell = Get1FromNestedArray(metadata.cell)                              # reference.Cell
-    dob = Get1FromNestedArray(metadata.data_of_birth)                      # subject.Subject
-    date_of_experiment = Get1FromNestedArray(metadata.date_of_experiment)  # acquisition.Session
+    animal_ID = get_one_from_nested_array(metadata.animal_ID).upper()            # subject.Subject # .upper() here to handle some inconsistencies in the dataset
+    animal_background = get_one_from_nested_array(metadata.animal_background)    # empty
+    cell = get_one_from_nested_array(metadata.cell)                              # reference.Cell
+    dob = get_one_from_nested_array(metadata.data_of_birth)                      # subject.Subject
+    dob = extract_datetime(dob) # map this date string to datetime object
+
+    date_of_experiment = get_one_from_nested_array(metadata.date_of_experiment)  # acquisition.Session
+    date_of_experiment = extract_datetime(date_of_experiment) # map this date string to datetime object
     
     experiment_type = metadata.experiment_type
     
-    experimenters = Get1FromNestedArray(metadata.experimenters)            # reference.Experimenter
+    experimenters = get_one_from_nested_array(metadata.experimenters)            # reference.Experimenter
     fiber = metadata.fiber # empty
-    manipulation_type = Get1FromNestedArray(metadata.manipulation_type)    # not sure
-    onsetLatency = Get1FromNestedArray(metadata.onsetLatency)              # not sure
-    sex = Get1FromNestedArray(metadata.sex)                                # subject.Subject
-    source_gene_copy = Get1FromNestedArray(metadata.source_gene_copy)      # probably  reference.SourceStrain (not implemented)
-    source_identifier = Get1FromNestedArray(metadata.source_identifier)    # reference.AnimalSource
-    source_strain = Get1FromNestedArray(metadata.source_strain)            # subject.Allele
-    source_transgene = Get1FromNestedArray(metadata.source_transgene)      # not sure
-    species = Get1FromNestedArray(metadata.species)                        # subject.Species
-    weight_after_experiment = Get1FromNestedArray(metadata.weight_after_experiment)   # action.Weighing
-    weight_before_experiment = Get1FromNestedArray(metadata.weight_before_experiment) # action.Weighing
-    whisker = Get1FromNestedArray(metadata.whisker)                        # reference.Whisker
+    manipulation_type = get_one_from_nested_array(metadata.manipulation_type)    # not sure
+    onsetLatency = get_one_from_nested_array(metadata.onsetLatency)              # not sure
+    sex = get_one_from_nested_array(metadata.sex)                                # subject.Subject
+    source_gene_copy = get_one_from_nested_array(metadata.source_gene_copy)      # probably  reference.SourceStrain (not implemented)
+    source_identifier = get_one_from_nested_array(metadata.source_identifier)    # reference.AnimalSource
+    source_strain = get_one_from_nested_array(metadata.source_strain)            # subject.Allele
+    source_transgene = get_one_from_nested_array(metadata.source_transgene)      # not sure
+    species = get_one_from_nested_array(metadata.species)                        # subject.Species
+    weight_after_experiment = get_one_from_nested_array(metadata.weight_after_experiment)   # action.Weighing
+    weight_before_experiment = get_one_from_nested_array(metadata.weight_before_experiment) # action.Weighing
+    whisker = get_one_from_nested_array(metadata.whisker)                        # reference.Whisker
     
     extracellular = metadata.extracellular[0,0] if metadata.extracellular.size != 0 else None  
     if  extracellular is not None:
-        atlas_location = Get1FromNestedArray(extracellular.atlas_location)       # not sure
-        cell_type = Get1FromNestedArray(extracellular.cell_type)                 # reference.Cell
-        ground_location =  Get1FromNestedArray(extracellular.ground_location)    # not sure 
-        identification_method =  Get1FromNestedArray(extracellular.identification_method) # not sure
-        nth_time_accessing_tissue =  Get1FromNestedArray(extracellular.nth_time_accessing_tissue)
-        probe_type =  Get1FromNestedArray(extracellular.probe_type)              # probably reference.Device (not implemented)
-        recording_coord_location = Get1FromNestedArray(extracellular.recording_coord_location[0,0]) # reference.BrainLocation
-        recording_coord_depth =    Get1FromNestedArray(extracellular.recording_coord_location[0,1]) # acquisition.RecordingLocation 
-        recording_location_marker =  Get1FromNestedArray(extracellular.recording_location_marker) # not sure
-        recording_type = Get1FromNestedArray(extracellular.recording_type)       # not sure
-        ref_loc =  Get1FromNestedArray(extracellular.ref_loc)                            # not sure
+        atlas_location = get_one_from_nested_array(extracellular.atlas_location)       # not sure
+        cell_type = get_one_from_nested_array(extracellular.cell_type)                 # reference.Cell
+        ground_location =  get_one_from_nested_array(extracellular.ground_location)    # not sure 
+        identification_method =  get_one_from_nested_array(extracellular.identification_method) # not sure
+        nth_time_accessing_tissue =  get_one_from_nested_array(extracellular.nth_time_accessing_tissue)
+        probe_type =  get_one_from_nested_array(extracellular.probe_type)              # probably reference.Device (not implemented)
+        recording_coord_location = get_one_from_nested_array(extracellular.recording_coord_location[0,0]) # reference.BrainLocation
+        recording_coord_depth =    get_one_from_nested_array(extracellular.recording_coord_location[0,1]) # acquisition.RecordingLocation 
+        recording_location_marker =  get_one_from_nested_array(extracellular.recording_location_marker) # not sure
+        recording_type = get_one_from_nested_array(extracellular.recording_type)       # not sure
+        ref_loc =  get_one_from_nested_array(extracellular.ref_loc)                            # not sure
     else: 
         atlas_location, cell_type, ground_location, identification_method, nth_time_accessing_tissue, \
         probe_type, recording_coord_location, recording_coord_depth, recording_location_marker, \
@@ -81,29 +86,27 @@ for metadatafile in metadatafiles:
     photostim = metadata.photostim[0,0] if metadata.photostim.size != 0 else None    
     if  photostim is not None:
         #stim_lambda =                                                        # acquisition.PhotoStim
-        photostim_atlas_location = Get1FromNestedArray(photostim.photostim_atlas_location) # acquisition.PhotoStim
-        photostim_coord_location = Get1FromNestedArray(photostim.photostim_coord_location) # acquisition.PhotoStim
-        stimulation_method = Get1FromNestedArray(photostim.stimulation_method)
+        photostim_atlas_location = get_one_from_nested_array(photostim.photostim_atlas_location) # acquisition.PhotoStim
+        photostim_coord_location = get_one_from_nested_array(photostim.photostim_coord_location) # acquisition.PhotoStim
+        stimulation_method = get_one_from_nested_array(photostim.stimulation_method)
     else: photostim_atlas_location, photostim_coord_location, stimulation_method = None, None, None
     
     virus = metadata.virus[0,0] if metadata.virus.size != 0 else None  
     if  virus is not None:
-        atlas_location = Get1FromNestedArray(virus.atlas_location)               # not sure (location)
+        atlas_location = get_one_from_nested_array(virus.atlas_location)               # not sure (location)
         depth = virus.depth                                         # action.VirusInjection
-        injection_date = Get1FromNestedArray(virus.injection_date)               # action.VirusInjection
+        injection_date = get_one_from_nested_array(virus.injection_date)               # action.VirusInjection
         injection_pattern = virus.injection_pattern # empty         # action.VirusInjection
-        titer = Get1FromNestedArray(virus.titer)                                 # reference.Virus
-        virus_coord_location = Get1FromNestedArray(virus.virus_coord_location)  # not sure (location)
+        titer = get_one_from_nested_array(virus.titer)                                 # reference.Virus
+        virus_coord_location = get_one_from_nested_array(virus.virus_coord_location)  # not sure (location)
         virus_lot_number = virus.virus_lot_number # empty           # reference.Virus
-        virus_name = Get1FromNestedArray(virus.virus_name)                       # reference.Virus
-        virus_source = Get1FromNestedArray(virus.virus_source)                   # reference.VirusSource
+        virus_name = get_one_from_nested_array(virus.virus_name)                       # reference.Virus
+        virus_source = get_one_from_nested_array(virus.virus_source)                   # reference.VirusSource
         volume = virus.volume                                       # action.VirusInjection
     else: 
         atlas_location, depth, injection_date, injection_pattern, titer, \
         virus_coord_location, virus_lot_number, virus_name, virus_source, \
         volume = None, None, None, None, None, None, None, None, None, None
-        
-    
     
     # ------------ Species ------------
     subject.Species.insert1([species], skip_duplicates=True)
@@ -119,12 +122,7 @@ for metadatafile in metadatafiles:
     reference.AnimalSource.insert1([source_identifier], skip_duplicates=True)
     
     # ------------ Subject ------------
-    if sex is None : sex = 'U'
-    if dob is not None : 
-        try: dob = datetime.strptime(str(dob),_datetimeformat_ymd) # expected datetime format: yymmdd
-        except:
-            try: dob = datetime.strptime(str(dob),_datetimeformat_ydm) # in case some dataset has messed up format: yyddmm
-            except: dob = None
+    sex = 'U' if sex is None else sex
             
     strain = 'N/A' # for this dataset, let's just say we dont know strain
     
@@ -151,7 +149,11 @@ for metadatafile in metadatafiles:
     # handling some inconsistency in cell naming convention in the metadata
     if len(cell) < 7 : cell = cell + '_AAAA'
     
-    reference.Cell.insert1([cell, cell_type],skip_duplicates=True)
+    reference.Cell.insert1(
+            {'subject_id':animal_ID,
+             'cell_id':cell, 
+             'cell_type':cell_type},
+             skip_duplicates=True)
     
     # ------------ RecordingLocation ------------
     splittedstr = re.split(', |Layer | ',recording_coord_location)
@@ -161,14 +163,11 @@ for metadatafile in metadatafiles:
     depth = re.findall(r'\d+',recording_coord_depth)[0] # need to implement a way to check if the unit is in um, if not then convert
     
     # Check brain location first
-    matchedBrainLocation = (reference.BrainLocation() & {'brain_location': region , 'cortical_layer' : layer , 'brain_subregion' : subregion}).fetch()
-    if matchedBrainLocation.size == 0: 
+    if not (reference.BrainLocation() & {'brain_location': region , 'cortical_layer' : layer , 'brain_subregion' : subregion}).fetch() : 
         reference.BrainLocation.insert1(
                 {'brain_location':region,
                  'cortical_layer':layer,
-                 'brain_subregion':subregion},
-                skip_duplicates=True)        
-        
+                 'brain_subregion':subregion})        
     
     acquisition.RecordingLocation.insert1(
             {'brain_location':region,
@@ -180,36 +179,29 @@ for metadatafile in metadatafiles:
     # ------------ Experimenter ------------
     reference.Experimenter.insert1([experimenters],skip_duplicates=True)
     
-    # ------------ Session ------------
-    if date_of_experiment is not None : 
-        try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ymd) # expected datetime format: yymmdd
-        except:
-            try: date_of_experiment = datetime.strptime(str(date_of_experiment),_datetimeformat_ydm) # in case some dataset has messed up format: yyddmm
-            except: date_of_experiment = None, print('Session Date error at: ' + metadatafile) # let's hope this doesn't happen
-        
-    
+    # ------------ Session ------------        
     if date_of_experiment is not None: 
-        acquisition.Session.connection.start_transaction()
-        acquisition.Session.insert1(            
-                    {'subject_id':animal_ID,
-                     'cell_id':cell,
-                     'session_time': date_of_experiment,
-                     'brain_location':region,
-                     'cortical_layer':layer,
-                     'brain_subregion':subregion,
-                     'recording_depth':depth,
-                     }, 
-                     skip_duplicates=True)
-        acquisition.Session.Experimenter.insert1(            
-                    {'subject_id':animal_ID,
-                     'cell_id':cell,
-                     'session_time': date_of_experiment,
-                     'experimenter': experimenters
-                     }, 
-                     skip_duplicates=True)
-        # there is still the ExperimentType part table here...
-        acquisition.Session.connection.commit_transaction()
-        print(f'\tSession created - Subject: {animal_ID} - Cell: {cell} - Date: {date_of_experiment}')
+        with acquisition.Session.connection.start_transaction():
+            acquisition.Session.insert1(            
+                        {'subject_id':animal_ID,
+                         'cell_id':cell,
+                         'session_time': date_of_experiment,
+                         'brain_location':region,
+                         'cortical_layer':layer,
+                         'brain_subregion':subregion,
+                         'recording_depth':depth,
+                         }, 
+                         skip_duplicates=True)
+            acquisition.Session.Experimenter.insert1(            
+                        {'subject_id':animal_ID,
+                         'cell_id':cell,
+                         'session_time': date_of_experiment,
+                         'experimenter': experimenters
+                         }, 
+                         skip_duplicates=True)
+            # there is still the ExperimentType part table here...
+            acquisition.Session.connection.commit_transaction()
+            print(f'\tSession created - Subject: {animal_ID} - Cell: {cell} - Date: {date_of_experiment}')
     
     
     ## Need to perform ingestion for Virus, VirusInjection and PhotoStim ##

@@ -9,13 +9,12 @@ schema = dj.schema('ttngu207_reference',locals())
 @schema
 class CorticalLayer(dj.Lookup):
     definition = """
-    cortical_layer = 'N/A' : enum('N/A','1','2','3','4','5','6','2/3','3/4','4/5','5/6')
-    ---
+    cortical_layer : varchar(8) # layer within cortex
     """
     contents = [['N/A'],['1'],['2'],['3'],['4'],['5'],['6'],['2/3'],['3/4'],['4/5'],['5/6']]
 
 @schema
-class BrainLocation(dj.Lookup):
+class BrainLocation(dj.Manual): # "dj.Manual" here because, for different session in a dataset, or across different dataset, most likely new applicable brain location will be entered. Unless we have some giant atlas/templates with all brain locations (very unlikely)
     definition = """ 
     brain_location: varchar(32)
     brain_subregion = 'N/A' : varchar(32)
@@ -92,22 +91,12 @@ class Experimenter(dj.Lookup):
     contents = [['Nuo Li']]
 
 @schema
-class Whisker(dj.Lookup):
+class WhiskerConfig(dj.Lookup):
     definition = """
     whisker_config: varchar(32)
     """
     contents = [['full'], ['C2']]
-    
-@schema
-class Cell(dj.Lookup):
-    definition = """
-    cell_id: varchar(64)
-    ---
-    cell_type: enum('excitatory','inhibitory')
-    
-    """    
-    
-    
+        
 @schema
 class BehavioralType(dj.Lookup):
     definition = """
@@ -136,21 +125,3 @@ class EphysType(dj.Lookup):
             ['voltage'],
             ['spike'],
             ]       
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    

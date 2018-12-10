@@ -7,11 +7,10 @@ from datetime import datetime
 import numpy as np
 import scipy.io as sio
 import datajoint as dj
-from pipeline.helper_functions import Get1FromNestedArray, GetListFromNestedArray, _datetimeformat_ydm, _datetimeformat_ymd
+from .helper_functions import get_one_from_nested_array, datetimeformat_ydm, datetimeformat_ymd
 
 import datajoint as dj
-from pipeline import reference, subject
-
+from . import reference, subject
 
 schema = dj.schema('ttngu207_acquisition',locals())
 
@@ -25,12 +24,11 @@ class ExperimentType(dj.Lookup):
     ]
 
 @schema 
-class RecordingLocation(dj.Lookup): # this certainly is a horrible name
+class RecordingLocation(dj.Lookup): 
     definition = """
     -> reference.BrainLocation
-    recording_depth: float # depth in um    # this is a tricky design, should depth unit be kept separately? is um the standardized unit in this field?
+    recording_depth: float # depth in um    
     """
-
 
 @schema
 class PhotoStim(dj.Manual):
@@ -50,13 +48,12 @@ class PhotoStim(dj.Manual):
 @schema
 class Session(dj.Manual):
     definition = """
-    -> subject.Subject
-    -> reference.Cell
+    -> subject.Cell
     session_time: datetime    # session time
     ---
     -> RecordingLocation
-    session_directory = NULL: varchar(256)
-    session_note = NULL : varchar(256) # 
+    session_directory = "": varchar(256)
+    session_note = "" : varchar(256) # 
     """
 
     class Experimenter(dj.Part):
@@ -87,7 +84,6 @@ class Behavior(dj.Imported):
     behavior_time_stamp: longblob
     behavior_timeseries: longblob        
     """    
-    
     
 @schema
 class Ephys(dj.Imported):
