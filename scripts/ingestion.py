@@ -192,18 +192,21 @@ for meta_data_file in meta_data_files:
                                     ignore_extra_fields=True, skip_duplicates=True)
         print(f'\tInsert Virus Injections - Count: {len(meta_data.virus.depth)}')
 
+# ====================== Starting import and compute procedure ======================
+# -- TrialSet
+acquisition.TrialSet.populate()
+# -- Ephys
+acquisition.EphysAcquisition.populate()
+# -- Behavioral
+acquisition.BehaviorAcquisition.populate()
+
+
 
 # ========================================================================
 # =========================== R&D ==========================
-if False:
-    mat_data = sio.loadmat(os.path.join(sess_data_dir, 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
-                          struct_as_record=False, squeeze_me=True)['c']
+# sess_data = sio.loadmat(os.path.join(os.path.join('data', 'datafiles'), 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
+#                       struct_as_record=False, squeeze_me=True)['c']
 
-    time_series = matdata.timeSeriesArrayHash
-    behav = timeSeries.value[0]
-    ephys = timeSeries.value[1]
-
-    trialProperties = matdata.trialPropertiesHash
 
 
 

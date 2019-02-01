@@ -143,9 +143,9 @@ class ExperimentalEvent(dj.Lookup):
     ---
     description: varchar(256)    
     """
-    contents = zip(['trial_start', 'trial_stop', 'pole_in', 'pole_out', 'lick_time'],
+    contents = zip(['trial_start', 'trial_stop', 'pole_in', 'pole_out'],
                    ['trial start time', 'trial end time',
-                    'onset of pole moving in', 'onset of pole moving out', 'Lick times'])
+                    'onset of pole moving in', 'onset of pole moving out'])
 
     
 @schema
@@ -161,4 +161,4 @@ class TrialResponse(dj.Lookup):
     definition = """ # The behavioral response of this subject of this trial - correct/incorrect with respect to the trial type
     trial_response: varchar(32)
     """
-    contents = zip(['correct', 'incorrect', 'correct reject', 'false alarm', 'N/A'])
+    contents = zip(['Hit', 'Miss', 'CR', 'FA', 'N/A'])

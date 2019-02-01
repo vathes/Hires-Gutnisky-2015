@@ -41,9 +41,11 @@ def find_session_matched_matfile(sess_data_dir, sess_key):
         sess_data_file = None
         for s in sess_data_files:
             if re.search(sess_key['session_id'], s):
+                sess_data_file = s
                 print(f'Found datafile: {sess_data_file}')
-                return sess_data_file
-            else:
-                print(f'Session not found! - Session: {sess_key["session_id"]}')
-                return None
+        if sess_data_file:
+            return sess_data_file
+        else:
+            print(f'Session not found! - Session: {sess_key["session_id"]}')
+            return None
         

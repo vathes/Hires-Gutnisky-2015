@@ -68,7 +68,35 @@ class BehaviorAcquisition(dj.Imported):
     """
 
     def make(self, key):
-        return
+        sess_data_dir = os.path.join('data', 'datafiles')
+        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        if sess_data_file is None:
+            print(f'Trial import failed for session: {key["session_id"]}')
+            return
+        sess_data = sio.loadmat(os.path.join(sess_data_dir, 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
+                               struct_as_record = False, squeeze_me = True)['c']
+        time_conversion_factor = utilities.time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
+        behavior_data = sess_data.timeSeriesArrayHash.value[0].valueMatrix * time_conversion_factor
+        time_stamps = sess_data.timeSeriesArrayHash.value[0].time * time_conversion_factor
+
+        key['behavior_start_time'] = time_stamps[0]
+        key['behavior_sampling_rate'] = 1/np.mean(np.diff(time_stamps))
+
+        behavioral_key_maps = {'thetaAtBase': 'theta_at_base',
+                               'amplitude': 'ampitude',
+                               'phase': 'phase',
+                               'setpoint': 'set_point',
+                               'thetafilt': 'theta_filt',
+                               'deltaKappa': 'delta_kappa',
+                               'touch_onset': 'touch_onset',
+                               'touch_offset': 'touch_offset',
+                               'distance_to_pole': 'distance_to_pole',
+                               'pole_available': 'pole_available',
+                               'beam_break_times': 'beam_break_times'}
+        self.insert1({**key, **{behavioral_key_maps[n]: behavior_data[n_idx, :]
+                                for n_idx, n in enumerate(sess_data.timeSeriesArrayHash.value[0].idStr)}})
+        print(f'Inserted behavioral data for session: {key["session_id"]}')
 
 
 @schema
@@ -98,115 +126,37 @@ class Cell(dj.Manual):
   
     
 @schema
-class IntracellularAcquisition(dj.Imported):
+class EphysAcquisition(dj.Imported):
     definition = """ # Membrane potential recording from a cell, and electrical stimulation profile to this cell
     -> Cell
-    """     
-    
-    class MembranePotential(dj.Part):
-        definition = """
-        -> master
-        ---
-        membrane_potential: longblob    # (mV) membrane potential recording at this cell
-        membrane_potential_wo_spike: longblob # (mV) membrane potential without spike data, derived from membrane potential recording    
-        membrane_potential_start_time: float # (s) first timepoint of membrane potential recording
-        membrane_potential_sampling_rate: float # (Hz) sampling rate of membrane potential recording
-        """
-        
-    class CurrentInjection(dj.Part):
-        definition = """
-        -> master
-        ---
-        current_injection: longblob
-        current_injection_start_time: float  # first timepoint of current injection recording
-        current_injection_sampling_rate: float  # (Hz) sampling rate of current injection recording
-        """
-        
-    def make(self, key):
-        return
-
-    
-@schema
-class ProbeInsertion(dj.Manual):
-    definition = """ # Description of probe insertion details during extracellular recording
-    -> Session
-    -> reference.Probe
-    -> reference.ActionLocation
-    """    
-    
-
-@schema
-class ExtracellularAcquisition(dj.Imported):
-    definition = """ # Raw extracellular recording, channel x time (e.g. LFP)
-    -> ProbeInsertion
-    """    
-    
-    class Voltage(dj.Part):
-        definition = """
-        -> master
-        ---
-        voltage: longblob   # (mV)
-        voltage_start_time: float # (second) first timepoint of voltage recording
-        voltage_sampling_rate: float # (Hz) sampling rate of voltage recording
-        """
-        
-    def make(self, key):
-        # this function implements the ingestion of raw extracellular data into the pipeline
-        return None
-
-
-@schema
-class UnitSpikeTimes(dj.Imported):
-    definition = """ 
-    -> ProbeInsertion
-    unit_id : smallint
     ---
-    -> reference.Probe.Channel
-    spike_times: longblob  # (s) time of each spike, with respect to the start of session 
-    unit_cell_type: varchar(32)  # e.g. cell-type of this unit (e.g. wide width, narrow width spiking)
-    unit_x: float  # (mm)
-    unit_y: float  # (mm)
-    unit_z: float  # (mm)
-    spike_waveform: longblob  # waveform(s) of each spike at each spike time (spike_time x waveform_timestamps)
-    """
-        
+    voltage: longblob  # (mV)
+    spike_train: longblob
+    ephys_start_time: float  # (s)
+    ephys_sampling_rate: float # (Hz)
+    """     
+
     def make(self, key):
-        # ================ Dataset ================
-        sess_data_dir = os.path.join('..', 'data', 'extracellular', 'datafiles')
-        # Get the Session definition from the keys of this session
-        animal_id = key['subject_id']
-        date_of_experiment = key['session_time']
-        # Search the files in filenames to find a match for "this" session (based on key)
-        sess_data_file = utilities.find_session_matched_nwbfile(sess_data_dir, animal_id, date_of_experiment)
-        if sess_data_file is None: 
-            print(f'UnitSpikeTimes import failed for: {animal_id} - {date_of_experiment}')
+        sess_data_dir = os.path.join('data', 'datafiles')
+        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        if sess_data_file is None:
+            print(f'Trial import failed for session: {key["session_id"]}')
             return
-        nwb = h5.File(os.path.join(sess_data_dir,sess_data_file), 'r')
-        # ------ Spike ------
-        ec_event_waveform = nwb['processing']['extracellular_units']['EventWaveform']
-        ec_unit_times = nwb['processing']['extracellular_units']['UnitTimes']
-        # - unit cell type
-        cell_type = {}
-        for tmp_str in ec_unit_times.get('cell_types').value:
-            tmp_str = tmp_str.decode('UTF-8')
-            split_str = re.split(' - ', tmp_str)
-            cell_type[split_str[0]] = split_str[1]
-        # - unit info
-        print('Inserting spike unit: ', end="")
-        for unit_str in ec_event_waveform.keys():
-            unit_id = int(re.search('\d+', unit_str).group())
-            unit_depth = ec_unit_times.get(unit_str).get('depth').value
-            key['unit_id'] = unit_id
-            key['channel_id'] = ec_event_waveform.get(unit_str).get('electrode_idx').value.item(0) - 1  # TODO: check if electrode_idx has MATLAB 1-based indexing (starts at 1)
-            key['spike_times'] = ec_unit_times.get(unit_str).get('times').value
-            key['unit_cell_type'] = cell_type[unit_str]
-            key.update(zip(('unit_x', 'unit_y', 'unit_z'), unit_depth))
-            key['spike_waveform'] = ec_event_waveform.get(unit_str).get('data').value
-            self.insert1(key)
-            print(f'{unit_id} ', end="")
-        print('')
-        nwb.close()
-    
+        sess_data = sio.loadmat(os.path.join(sess_data_dir, 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
+                               struct_as_record = False, squeeze_me = True)['c']
+        time_conversion_factor = utilities.time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
+        ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix * time_conversion_factor
+        time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
+
+        key['voltage'] = ephys_data[0, :].todense()
+        key['spike_train'] = ephys_data[1, :].todense()
+        key['ephys_start_time'] = time_stamps[0]
+        key['ephys_sampling_rate'] = 1/np.mean(np.diff(time_stamps))
+
+        self.insert1(key)
+        print(f'Inserted ephys data for session: {key["session_id"]}')
+
 
 @schema
 class TrialSet(dj.Imported):
@@ -238,34 +188,43 @@ class TrialSet(dj.Imported):
         """
 
     def make(self, key):
-        sess_data_dir = os.path.join('..', 'data', 'datafiles')
+        sess_data_dir = os.path.join('data', 'datafiles')
         sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
         if sess_data_file is None:
             print(f'Trial import failed for session: {key["session_id"]}')
             return
         sess_data = sio.loadmat(os.path.join(sess_data_dir, 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
                                struct_as_record = False, squeeze_me = True)['c']
-        # get time unit dict
-        trial_time_unit = sess_data.timeUnitNames[sess_data.trialTimeUnit]
+        key['trial_counts'] = len(sess_data.trialIds)
+        self.insert1(key)
 
+        # read trial info
+        time_conversion_factor = utilities.time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.trialTimeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
+        pole_in_times = sess_data.trialPropertiesHash.value[1] * time_conversion_factor
+        pole_out_times = sess_data.trialPropertiesHash.value[2] * time_conversion_factor
+        time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
 
-
-
-@schema
-class TrialStimInfo(dj.Imported):
-    definition = """ # information related to the stimulation settings for this trial
-    -> TrialSet.Trial
-    ---
-    photo_stim_type: enum('stimulation','inhibition','N/A')
-    photo_stim_period: enum('sample','delay','response','N/A')
-    photo_stim_power: float  # (mW) stimulation power 
-    photo_loc_galvo_x: float  # (mm) photostim coordinates field 
-    photo_loc_galvo_y: float  # (mm) photostim coordinates field 
-    photo_loc_galvo_z: float  # (mm) photostim coordinates field 
-    """    
-    
-    def make(self, key):
-        # this function implements the ingestion of Trial stim info into the pipeline
-        return None
-    
-    
+        print(f'Inserted trial set for session: {key["session_id"]}')
+        print('Inserting trial ID: ', end="")
+        for idx, trial_id in enumerate(sess_data.trialIds):
+            key['trial_id'] = int(trial_id)
+            key['start_time'] = time_stamps[np.where(
+                sess_data.timeSeriesArrayHash.value[1].trial == int(trial_id))[0][0]]
+            key['stop_time'] = time_stamps[np.where(
+                sess_data.timeSeriesArrayHash.value[1].trial == int(trial_id))[0][-1]]
+            key['trial_response'] = sess_data.trialTypeStr[np.where(sess_data.trialTypeMat[:-1, idx] == 1)[0][0]]
+            key['trial_stim_present'] = int(sess_data.trialTypeMat[-1, idx] == 1)  # why DJ throws int type error for bool??
+            key['trial_type'] = sess_data.trialPropertiesHash.value[-1][idx]
+            key['pole_position'] = sess_data.trialPropertiesHash.value[0][idx] * 0.0992  # convert to micron here (0.0992 microns / microstep)
+            self.Trial.insert1(key, ignore_extra_fields=True)
+            # ======== Now add trial event timing to the EventTime part table ====
+            event_dict = dict(trial_start=key['start_time'],
+                              trial_stop=key['start_time'],
+                              pole_in=pole_in_times[idx],
+                              pole_out=pole_out_times[idx])
+            self.EventTime.insert((dict(key, trial_event=k, event_time=v)
+                                       for k, v in event_dict.items()),
+                                      ignore_extra_fields=True)
+            print(f'{trial_id} ', end = "")
+        print('')
