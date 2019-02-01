@@ -43,8 +43,8 @@ class TrialSet(dj.Imported):
         pole_trial_condition: enum('Go','NoGo')  # string indicating whether the pole was presented in a ‘Go’ or ‘Nogo’ location
         pole_position: float                     # the location of the pole along the anteroposterior axis of the animal in microns
         pole_in_time: float                      # the start of sample period for each trial (e.g. the onset of pole motion towards the exploration area), in units of seconds, relative to trialStartTimes
-        pole_out_time: float                     # the end of the sample period (e.g. the onset of pole motion away from the exploration area)
-        lick_time: longblob                      # an array of times of when the mouse’s tongue initiates contact with the spout
+        pole_out_time: float                     # the end of the sample period (e.g. the onset of pole motion away from the exploration area), in seconds
+        lick_time: longblob                      # an array of times of when the mouse’s tongue initiates contact with the spout, in seconds
         start_sample: int       # the index of the starting sample of this trial, with respect to the starting of this session (at 0th sample point) - this way, time will be derived from the sampling rate of a particular recording downstream
         end_sample: int         # the index of the ending sample of this trial, with respect to the starting of this session (at 0th sample point) - this way, time will be derived from the sampling rate of a particular recording downstream
         """
@@ -81,24 +81,24 @@ class TrialSet(dj.Imported):
         else: print(f'Found datafile: {sess_data_file}')
         
         # Now read the data and start ingesting
-        matfile = sio.loadmat(os.path.join(sess_data_dir,sess_data_file), struct_as_record=False)
-        sessdata = matfile['c'][0,0]
+        sessdata = sio.loadmat(os.path.join(sess_data_dir,sess_data_file),
+                               struct_as_record=False, squeeze_me=True)['c']
         
-        timeUnitIds = get_list_from_nested_array(sessdata.timeUnitIds)
-        timeUnitNames = get_list_from_nested_array(sessdata.timeUnitNames)
+        timeUnitIds = sessdata.timeUnitIds
+        timeUnitNames = sessdata.timeUnitNames
         timesUnitDict = {}
         for idx, val in enumerate(timeUnitIds):
             timesUnitDict[val] = timeUnitNames[idx]
         
-        trialIds = get_list_from_nested_array(sessdata.trialIds)
-        trialStartTimes = get_list_from_nested_array(sessdata.trialStartTimes)
-        trialTimeUnit = get_one_from_nested_array(sessdata.trialTimeUnit)
+        trialIds = sessdata.trialIds
+        trialStartTimes = sessdata.trialStartTimes
+        trialTimeUnit = sessdata.trialTimeUnit
         trialTypeMat = sessdata.trialTypeMat
-        trialTypeStr = get_list_from_nested_array(sessdata.trialTypeStr)
+        trialTypeStr = sessdata.trialTypeStr
         
         trialPropertiesHash = sessdata.trialPropertiesHash[0,0]
-        descr = get_list_from_nested_array(trialPropertiesHash.descr)
-        keyNames = get_list_from_nested_array(trialPropertiesHash.keyNames)
+        descr = trialPropertiesHash.descr
+        keyNames = trialPropertiesHash.keyNames
         value = trialPropertiesHash.value
         polePos = np.array(get_list_from_nested_array(value[0,0])) # this is in microstep
         polePos = polePos * 0.0992 # convert to micron here  (0.0992 microns / microstep)
@@ -108,9 +108,12 @@ class TrialSet(dj.Imported):
         poleTrialCondition = get_list_from_nested_array(value[0,4])
         
         timeSeries = sessdata.timeSeriesArrayHash[0,0]
-        behav = timeSeries.value[0,0][0,0]
-        ephys = timeSeries.value[0,1][0,0]
         
+        # Get vector of trial_ids per sample 
+        try: # get from behavioral data
+            trial_idx_vec = timeSeries.value[0,0][0,0].trial[0,:]
+        except: # in case this trialset doesn't have any behav data, get from ephys
+            trial_idx_vec = timeSeries.value[0,1][0,0].trial[0,:]
                 
         part_key = key.copy() # this is to perserve the original key for use in the part table later
         # form new key-values pair and insert key
@@ -133,10 +136,10 @@ class TrialSet(dj.Imported):
             tType = np.where(tType == 1)[0]
             tType = trialTypeStr[tType.item(0)] # this relies on the metadata consistency, e.g. a trial belongs to only 1 category of trial type
             
-            this_trial_sample_idx = np.where(behav.trial[0,:] == trialId)[0] #  
+            this_trial_sample_idx = np.where(trial_idx_vec == trialId)[0] #  
             if this_trial_sample_idx.size == 0:
                 # this implementation is a safeguard against inconsistency in data formatting - e.g. "data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat" where "trial" vector is not referencing trialId
-                this_trial_sample_idx = np.where(behav.trial[0,:] == (idx+1))[0] #  (+1) to take in to account that the native data format is MATLAB (index starts at 1)
+                this_trial_sample_idx = np.where(trial_idx_vec == (idx+1))[0] #  (+1) to take in to account that the native data format is MATLAB (index starts at 1)
             
             # form new key-values pair for part_key and insert
             part_key['trial_idx'] = trialId

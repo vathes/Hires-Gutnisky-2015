@@ -5,6 +5,14 @@ from datetime import datetime
 datetimeformat_ymd = '%y%m%d'
 datetimeformat_ydm = '%y%d%m'
 
+time_unit_convert_factor = {
+        'millisecond': 10e-3,
+        'second':1,
+        'minute':60,
+        'hour':3600,
+        'day':86400                
+        }
+
 def get_one_from_nested_array(nestedArray):
     if nestedArray.size == 0: return None
     unpackedVal = nestedArray
