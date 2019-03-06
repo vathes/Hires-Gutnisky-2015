@@ -5,34 +5,25 @@ import re
 import h5py as h5
 import numpy as np
 
-from . import reference, acquisition
+insert_size = 10
+
+time_unit_conversion_factor = {'millisecond': 1e-3,
+                               'second': 1,
+                               'minute': 60,
+                               'hour': 3600,
+                               'day': 86400}
+
+datetime_formats = ('%y%m%d', '%y%d%m')
 
 
-# datetime format - should probably read this from a config file and not hard coded here
-datetimeformat_ymdhms = '%Y-%m-%d %H:%M:%S'
-datetimeformat_ymd = '%y%m%d'
-datetimeformat_ydm = '%y%d%m'
-
-time_unit_conversion_factor = {
-        'millisecond': 10e-3,
-        'second': 1,
-        'minute': 60,
-        'hour': 3600,
-        'day': 86400
-        }
-
-def parse_prefix(line):
-    cover = len(datetime.now().strftime(datetimeformat_ymd))
-    try:
-        return datetime.strptime(line[:cover], datetimeformat_ymd)
-    except Exception as e:
-        msg = f'Error:  {str(e)} \n'
-        cover = len(datetime.now().strftime(datetimeformat_ydm))
+def parse_date(text):
+    for fmt in datetime_formats:
+        cover = len(datetime.now().strftime(fmt))
         try:
-            return datetime.strptime(line[:cover], datetimeformat_ydm)
-        except Exception as e:
-            print(f'{msg}\t{str(e)}\n\tReturn None')
-            return None    
+            return datetime.strptime(text[:cover], fmt)
+        except ValueError:
+            pass
+    raise ValueError('no valid date format found')
 
 
 def find_session_matched_matfile(sess_data_dir, sess_key):
@@ -42,10 +33,16 @@ def find_session_matched_matfile(sess_data_dir, sess_key):
         for s in sess_data_files:
             if re.search(sess_key['session_id'], s):
                 sess_data_file = s
-                print(f'Found datafile: {sess_data_file}')
         if sess_data_file:
             return sess_data_file
         else:
-            print(f'Session not found! - Session: {sess_key["session_id"]}')
             return None
-        
+
+
+def split_list(arr, size):
+    slice_from = 0
+    while len(arr) > slice_from:
+        slice_to = slice_from + size
+        yield arr[slice_from:slice_to]
+        slice_from = slice_to
+

@@ -3,7 +3,7 @@ Schema of subject information.
 '''
 import datajoint as dj
 
-schema = dj.schema(dj.config.get('database.prefix', '') + 'hg2015_reference')
+schema = dj.schema(dj.config.get('database.prefix', '') + 'reference')
 
 
 @schema
@@ -58,9 +58,9 @@ class CorticalLayer(dj.Lookup):
 @schema
 class Hemisphere(dj.Lookup):
     definition = """
-    hemisphere: varchar(8)
+    hemisphere: varchar(16)
     """
-    contents = zip(['left', 'right'])
+    contents = zip(['left', 'right', 'bilateral'])
 
 
 @schema
@@ -143,9 +143,9 @@ class ExperimentalEvent(dj.Lookup):
     ---
     description: varchar(256)    
     """
-    contents = zip(['trial_start', 'trial_stop', 'pole_in', 'pole_out'],
+    contents = zip(['trial_start', 'trial_stop', 'pole_in', 'pole_out', 'first_lick'],
                    ['trial start time', 'trial end time',
-                    'onset of pole moving in', 'onset of pole moving out'])
+                    'onset of pole moving in', 'onset of pole moving out', 'time of first lick'])
 
     
 @schema

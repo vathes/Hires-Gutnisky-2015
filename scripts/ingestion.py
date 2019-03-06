@@ -7,8 +7,8 @@ import re
 from decimal import Decimal
 
 import datajoint as dj
-from pipeline import reference, subject, acquisition, stimulation, virus #, behavior, ephys, action
-from pipeline import utilities
+from pipeline import (reference, subject, acquisition, stimulation, analysis, virus,
+                      intracellular, extracellular, behavior, utilities)
 
 # Merge all schema and generate the overall ERD (then save in "/images")
 all_erd = dj.ERD(reference) + dj.ERD(subject) + dj.ERD(acquisition)
@@ -27,45 +27,44 @@ for meta_data_file in meta_data_files:
         meta_data_dir, meta_data_file), struct_as_record = False, squeeze_me=True)['meta_data']
 
     # ==================== subject ====================
-    subject_info = {c: meta_data.__getattribute__(c)
-                    for c in ('animal_ID', 'sex', 'species')}
+    subject_info = dict(subject_id=meta_data.animal_ID.lower(),
+                        sex=meta_data.sex[0].upper() if meta_data.sex.size != 0 else 'U',
+                        species=meta_data.species.lower())
     if meta_data.animal_background.size != 0:
         subject_info['subject_description'] = meta_data.animal_background
-    # force subject_id to be lower-case for consistency
-    subject_info['subject_id'] = subject_info.pop('animal_ID').lower()
-    # dob and sex
-    subject_info['sex'] = subject_info['sex'][0].upper() if subject_info['sex'].size != 0 else 'U'
+    # dob
     if meta_data.data_of_birth.size != 0:
-        subject_info['date_of_birth'] = utilities.parse_prefix(meta_data.data_of_birth)
+        subject_info['date_of_birth'] = utilities.parse_date(meta_data.data_of_birth)
 
-    # source and strain
+    # allele
     source_strain = meta_data.source_strain  # subject.Allele
     if len(source_strain) > 0:  # if found, search found string to find matched strain in db
-        for s in subject.StrainAlias.fetch():
-            m = re.search(re.escape(s[0]), source_strain, re.I)
-            if m is not None:
-                subject_info['strain'] = (subject.StrainAlias & {'strain_alias': s[0]}).fetch1('strain')
-                break
+        allele_dict = {alias: allele for alias, allele in subject.AlleleAlias.fetch()}
+        regex_str = '|'.join([re.escape(alias) for alias in allele_dict.keys()])
+        alleles = [allele_dict[s] for s in re.findall(regex_str, source_strain)]
     else:
-        subject_info['strain'] = 'N/A'
+        alleles = ['N/A']
 
+    # source
     source_identifier = meta_data.source_identifier  # reference.AnimalSource
     if len(source_identifier) > 0:  # if found, search found string to find matched strain in db
-        for s in reference.AnimalSourceAlias.fetch():
-            m = re.search(re.escape(s[0]), source_identifier, re.I)
-            if m is not None:
-                subject_info['animal_source'] = (reference.AnimalSourceAlias & {'animal_source_alias': s[0]}).fetch1(
-                    'animal_source')
-                break
+        source_dict = {alias.lower(): source for alias, source in reference.AnimalSourceAlias.fetch()}
+        regex_str = '|'.join([re.escape(alias) for alias in source_dict.keys()])
+        subject_info['animal_source'] = (source_dict[
+            re.search(regex_str, source_identifier, re.I).group().lower()]
+                                         if re.search(regex_str, source_identifier, re.I) else 'N/A')
     else:
         subject_info['animal_source'] = 'N/A'
 
-    if subject_info not in subject.Subject.proj():
-        subject.Subject.insert1(subject_info, ignore_extra_fields = True)
+    with subject.Subject.connection.transaction:
+        if subject_info not in subject.Subject.proj():
+            subject.Subject.insert1(subject_info, ignore_extra_fields=True)
+            subject.Subject.Allele.insert((dict(subject_info, allele = k)
+                                           for k in alleles), ignore_extra_fields = True)
 
     # ==================== session ====================
     # -- session_time
-    date_of_experiment = utilities.parse_prefix(str(meta_data.date_of_experiment))  # acquisition.Session
+    date_of_experiment = utilities.parse_date(str(meta_data.date_of_experiment))  # acquisition.Session
     if date_of_experiment is not None:
         session_info = {'session_id': re.search('Cell\d+', meta_data_file).group(),
                        'session_time': date_of_experiment}
@@ -74,13 +73,11 @@ for meta_data_file in meta_data_files:
         experimenters = meta_data.experimenters  # reference.Experimenter
         experimenters = [experimenters] if np.array(experimenters).size <= 1 else experimenters  # in case there's only 1 experimenter
 
-        reference.Experimenter.insert(({'experimenter': k} for k in experimenters
-                                        if {'experimenter': k} not in reference.Experimenter))
-        acquisition.ExperimentType.insert(({'experiment_type': k} for k in experiment_types
-                                        if {'experiment_type': k} not in acquisition.ExperimentType))
+        reference.Experimenter.insert(zip(experimenters), skip_duplicates=True)
+        acquisition.ExperimentType.insert(zip(experiment_types), skip_duplicates=True)
 
-        if {**subject_info, **session_info} not in acquisition.Session.proj():
-            with acquisition.Session.connection.transaction:
+        with acquisition.Session.connection.transaction:
+            if {**subject_info, **session_info} not in acquisition.Session.proj():
                 acquisition.Session.insert1({**subject_info, **session_info}, ignore_extra_fields=True)
                 acquisition.Session.Experimenter.insert((dict({**subject_info, **session_info}, experimenter=k) for k in experimenters), ignore_extra_fields=True)
                 acquisition.Session.ExperimentType.insert((dict({**subject_info, **session_info}, experiment_type=k) for k in experiment_types), ignore_extra_fields=True)
@@ -103,8 +100,8 @@ for meta_data_file in meta_data_files:
             reference.BrainLocation.insert1(brain_location)
         # -- Whole Cell Device
         ie_device = extracellular.probe_type.split(', ')[0]
-        if {'device_name': ie_device} not in reference.WholeCellDevice.proj():
-            reference.WholeCellDevice.insert1({'device_name': ie_device, 'device_desc': extracellular.probe_type})
+        reference.WholeCellDevice.insert1({'device_name': ie_device, 'device_desc': extracellular.probe_type},
+                                          skip_duplicates=True)
         # -- Cell
         cell_id = meta_data.cell.upper()
         cell_key = dict({**subject_info, **session_info, **brain_location},
@@ -113,8 +110,8 @@ for meta_data_file in meta_data_files:
                         device_name=ie_device,
                         recording_depth=round(Decimal(re.match(
                             '\d+', extracellular.recording_coord_location[1]).group()), 2))
-        if cell_key not in acquisition.Cell.proj():
-            acquisition.Cell.insert1(cell_key, ignore_extra_fields = True)
+        if cell_key not in intracellular.Cell.proj():
+            intracellular.Cell.insert1(cell_key, ignore_extra_fields = True)
             print(f'\tInsert Cell: {cell_id}')
 
     # ==================== Photo stimulation ====================
@@ -129,37 +126,34 @@ for meta_data_file in meta_data_files:
                           'hemisphere': hemisphere,
                           'brain_location_full_name': photostimInfo.photostim_atlas_location}
         # -- BrainLocation
-        if brain_location not in reference.BrainLocation.proj():
-            reference.BrainLocation.insert1(brain_location)
+        reference.BrainLocation.insert1(brain_location, skip_duplicates=True)
         # -- ActionLocation
         action_location = dict(brain_location,
                                coordinate_ref = 'bregma',
                                coordinate_ap = round(Decimal(coord_ap_ml_dv[0]), 2),
                                coordinate_ml = round(Decimal(coord_ap_ml_dv[1]), 2),
                                coordinate_dv = round(Decimal('0'), 2))  # no depth information for photostim
-        if action_location not in reference.ActionLocation.proj():
-            reference.ActionLocation.insert1(action_location, ignore_extra_fields=True)
+        reference.ActionLocation.insert1(action_location, ignore_extra_fields=True, skip_duplicates=True)
 
         # -- Device
         stim_device = 'laser'  # hard-coded here..., could not find a more specific name from metadata
-        if {'device_name': stim_device} not in stimulation.PhotoStimDevice.proj():
-            stimulation.PhotoStimDevice.insert1({'device_name': stim_device})
+        stimulation.PhotoStimDevice.insert1({'device_name': stim_device}, skip_duplicates=True)
 
         # -- PhotoStimulationInfo
-        photim_stim_info = dict(action_location,
-                                device_name=stim_device,
-                                photo_stim_excitation_lambda=float(re.match(
-                                    '\d+', photostimInfo.__getattribute__('lambda')).group()),
-                                photo_stim_method=photostimInfo.stimulation_method)
-        if photim_stim_info not in stimulation.PhotoStimulationInfo.proj():
-            stimulation.PhotoStimulationInfo.insert1(photim_stim_info, ignore_extra_fields=True)
-            print(f'\tCreate new Photostim Information')
+        stim_lambda = float(re.match('\d+', getattr(photostimInfo, 'lambda')).group())
+        photim_stim_protocol = dict(protocol='_'.join([photostimInfo.stimulation_method, str(stim_lambda)]),
+                                    device_name=stim_device,
+                                    photo_stim_excitation_lambda=stim_lambda,
+                                    photo_stim_method=photostimInfo.stimulation_method)
+        stimulation.PhotoStimulationProtocol.insert1(photim_stim_protocol,
+                                                     ignore_extra_fields=True, skip_duplicates=True)
 
-        if dict(session_info, photostim_datetime = session_info['session_time']) not in acquisition.PhotoStimulation.proj():
-            acquisition.PhotoStimulation.insert1(dict({**subject_info, **session_info, **photim_stim_info},
+        if dict(session_info, photostim_datetime = session_info['session_time']) not in stimulation.PhotoStimulation.proj():
+            stimulation.PhotoStimulation.insert1(dict({**subject_info, **session_info,
+                                                       **action_location, **photim_stim_protocol},
                                                       photostim_datetime = session_info['session_time']),
                                                  ignore_extra_fields = True)
-            print(f'\tInsert Photostim')
+            print(f'\tInsert Photo-Stimulation')
 
     # ==================== Virus ====================
     if isinstance(meta_data.virus, sio.matlab.mio5_params.mat_struct):
@@ -169,21 +163,19 @@ for meta_data_file in meta_data_files:
             virus_lot_number=meta_data.virus.virus_lot_number if meta_data.virus.virus_lot_number.size != 0 else '',
             virus_titer=meta_data.virus.titer.replace('x10', '') if len(meta_data.virus.titer) > 0 else None)
 
-        if virus_info not in virus.Virus.proj():
-            virus.Virus.insert1(virus_info)
+        virus.Virus.insert1(virus_info, skip_duplicates=True)
 
         brain_location = {'brain_region': meta_data.virus.atlas_location.split(' ')[0],
                           'brain_subregion': meta_data.virus.virus_coord_location,
                           'cortical_layer': 'N/A',
                           'hemisphere': hemisphere}
         # -- BrainLocation
-        if brain_location not in reference.BrainLocation.proj():
-            reference.BrainLocation.insert1(brain_location)
+        reference.BrainLocation.insert1(brain_location, skip_duplicates=True)
 
         virus_injection = dict(
             {**virus_info, **subject_info, **brain_location},
             coordinate_ref='bregma',
-            injection_date=utilities.parse_prefix(meta_data.virus.injection_date))
+            injection_date=utilities.parse_date(meta_data.virus.injection_date))
 
         virus.VirusInjection.insert([dict(virus_injection,
                                           injection_depth = round(Decimal(re.match('\d+', depth).group()), 2),
@@ -192,23 +184,9 @@ for meta_data_file in meta_data_files:
                                     ignore_extra_fields=True, skip_duplicates=True)
         print(f'\tInsert Virus Injections - Count: {len(meta_data.virus.depth)}')
 
-# ====================== Starting import and compute procedure ======================
-# -- TrialSet
-acquisition.TrialSet.populate()
-# -- Ephys
-acquisition.EphysAcquisition.populate()
-# -- Behavioral
-acquisition.BehaviorAcquisition.populate()
-
 
 
 # ========================================================================
-# =========================== R&D ==========================
-# sess_data = sio.loadmat(os.path.join(os.path.join('data', 'datafiles'), 'data_structure_Cell01_ANM244028_141021_JY1243_AAAA.mat'),
-#                       struct_as_record=False, squeeze_me=True)['c']
-
-
-
 
 # =========================== NOT INGESTED ==========================
 # source_gene_copy = meta_data.source_gene_copy  # probably  reference.SourceStrain (not implemented)

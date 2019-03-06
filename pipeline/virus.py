@@ -12,7 +12,7 @@ import h5py as h5
 
 from . import reference, subject, utilities, stimulation
 
-schema = dj.schema(dj.config.get('database.prefix', '') + 'hg2015_virus')
+schema = dj.schema(dj.config.get('database.prefix', '') + 'virus')
 
 
 @schema
