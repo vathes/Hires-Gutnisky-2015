@@ -53,7 +53,7 @@ class MembranePotential(dj.Imported):
 
         key['membrane_potential'] = (ephys_data[0, :]
                                      if not isinstance(ephys_data[0, :], sparse.csc_matrix)
-                                     else ephys_data[0, :].todense())
+                                     else np.asarray(ephys_data[0, :].todense()).flatten())
         key['membrane_potential_timestamps'] = time_stamps
 
         self.insert1(key)
@@ -83,7 +83,7 @@ class SpikeTrain(dj.Imported):
 
         key['spike_train'] = (ephys_data[1, :]
                               if not isinstance(ephys_data[1, :], sparse.csc_matrix)
-                              else ephys_data[1, :].todense())
+                              else np.asarray(ephys_data[1, :].todense()).flatten())
         key['spike_timestamps'] = time_stamps
 
         self.insert1(key)
