@@ -33,6 +33,7 @@ class AlleleAlias(dj.Lookup):
     """
     contents = [
         ['C57BL6', 'C57BL6'],
+        ['C57/Bl6', 'C57BL6'],
         ['C57Bl/6', 'C57BL6'],
         ['Ai35D', 'Ai35D'],
         ['Ai32', 'Ai32'],

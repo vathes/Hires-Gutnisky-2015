@@ -8,23 +8,26 @@ import pytz
 import re
 import numpy as np
 import pandas as pd
+import tqdm
+import warnings
 
 from pipeline import (reference, subject, acquisition, stimulation, analysis, virus,
                       intracellular, extracellular, behavior, utilities)
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 
+warnings.filterwarnings('ignore', module='pynwb')
 # =============================================
 # Each NWBFile represent a session, thus for every session in acquisition.Session, we build one NWBFile
 
-for session_key in acquisition.Session.fetch('KEY'):
+for session_key in tqdm.tqdm(acquisition.Session.fetch('KEY')):
     this_session = (acquisition.Session & session_key).fetch1()
     # =============== General ====================
     # -- NWB file - a NWB2.0 file for each session
     nwbfile = NWBFile(
         session_description=this_session['session_note'],
         identifier='_'.join([this_session['subject_id'],
-                             this_session['session_time'].strftime('%Y-%m-%d_%H-%M-%S')]),
+                             this_session['session_time'].strftime('%Y-%m-%d')]),
         session_start_time=this_session['session_time'],
         file_create_date=datetime.now(tzlocal()),
         experimenter='; '.join((acquisition.Session.Experimenter & session_key).fetch('experimenter')),
@@ -35,12 +38,12 @@ for session_key in acquisition.Session.fetch('KEY'):
     nwbfile.subject = pynwb.file.Subject(
         subject_id=this_session['subject_id'],
         description=subj['subject_description'],
-        genotype= ' x '.join((subject.Subject & session_key).fetch('allele')),
+        genotype= ' x '.join((subject.Subject.Allele & session_key).fetch('allele')),
         sex=subj['sex'],
         species=subj['species'])
     # =============== Intracellular ====================
-    cell = ((acquisition.Cell & session_key).fetch1()
-            if len(acquisition.Cell & session_key) == 1
+    cell = ((intracellular.Cell & session_key).fetch1()
+            if len(intracellular.Cell & session_key) == 1
             else None)
     if cell:
         # metadata
@@ -51,7 +54,8 @@ for session_key in acquisition.Session.fetch('KEY'):
             description='N/A',
             filtering='low-pass: 10kHz',  # TODO: not in pipeline
             location='; '.join([f'{k}: {str(v)}'
-                                for k, v in (reference.ActionLocation & cell).fetch1().items()]))
+                                for k, v in dict((reference.BrainLocation & cell).fetch1(),
+                                                 depth=cell['recording_depth']).items()]))
         # acquisition - membrane potential
         mp, mp_timestamps = (intracellular.MembranePotential & cell).fetch1(
             'membrane_potential', 'membrane_potential_timestamps')
@@ -69,7 +73,7 @@ for session_key in acquisition.Session.fetch('KEY'):
         nwbfile.add_acquisition(pynwb.icephys.PatchClampSeries(name='spike_train',
                                                                electrode=ic_electrode,
                                                                unit='a.u.',  # TODO: not in pipeline
-                                                               conversion=1,
+                                                               conversion=1e1,
                                                                gain=1.0,
                                                                data=spk,
                                                                timestamps=spk_timestamps))
@@ -91,8 +95,8 @@ for session_key in acquisition.Session.fetch('KEY'):
                                         timestamps=timestamps)
 
     # =============== Photostimulation ====================
-    photostim = ((acquisition.PhotoStimulation & session_key).fetch1()
-                       if len(acquisition.PhotoStimulation & session_key) == 1
+    photostim = ((stimulation.PhotoStimulation & session_key).fetch1()
+                       if len(stimulation.PhotoStimulation & session_key) == 1
                        else None)
     if photostim:
         photostim_device = (stimulation.PhotoStimDevice & photostim).fetch1()
@@ -100,10 +104,10 @@ for session_key in acquisition.Session.fetch('KEY'):
         stim_site = pynwb.ogen.OptogeneticStimulusSite(
             name='-'.join([photostim['hemisphere'], photostim['brain_region']]),
             device=stim_device,
-            excitation_lambda=float(photostim['photo_stim_excitation_lambda']),
+            excitation_lambda=float((stimulation.PhotoStimulationProtocol & photostim).fetch1('photo_stim_excitation_lambda')),
             location = '; '.join([f'{k}: {str(v)}' for k, v in
                                   (reference.ActionLocation & photostim).fetch1().items()]),
-            description=(stimulation.PhotoStimulationInfo & photostim).fetch1('photo_stim_notes'))
+            description=(stimulation.PhotoStimulationProtocol & photostim).fetch1('photo_stim_notes'))
         nwbfile.add_ogen_site(stim_site)
 
         if photostim['photostim_timeseries'] is not None:
@@ -122,13 +126,13 @@ for session_key in acquisition.Session.fetch('KEY'):
     #                                                                       'id', 'start_time' and 'stop_time'.
     # Other trial-related information needs to be added in to the trial-table as additional columns (with column name
     # and column description)
-    if len(acquisition.TrialSet & session_key).fetch() == 1:
+    if len((acquisition.TrialSet & session_key).fetch()) == 1:
         # Get trial descriptors from TrialSet.Trial and TrialStimInfo
         trial_columns = [{'name': tag,
                           'description': re.sub('\s+:|\s+', ' ', re.search(
                               f'(?<={tag})(.*)', str((acquisition.TrialSet.Trial * stimulation.TrialPhotoStimInfo).heading)).group())}
-                         for tag in (acquisition.TrialSet.Trial * stimulation.TrialPhotoStimInfo).fetch(as_dict=True, limit=1)[0].keys()
-                         if tag not in (acquisition.TrialSet.Trial & stimulation.TrialPhotoStimInfo).primary_key + ['start_time', 'stop_time']]
+                         for tag in acquisition.TrialSet.Trial.fetch(as_dict=True, limit=1)[0].keys()
+                         if tag not in acquisition.TrialSet.Trial.primary_key + ['start_time', 'stop_time']]
 
         # Trial Events
         trial_events = set((acquisition.TrialSet.EventTime & session_key).fetch('trial_event'))
@@ -140,14 +144,11 @@ for session_key in acquisition.Session.fetch('KEY'):
         for c in trial_columns + event_names:
             nwbfile.add_trial_column(**c)
 
-        photostim_tag_default = {tag: '' for tag in stimulation.TrialPhotoStimInfo().fetch(as_dict=True, limit=1)[0].keys()
-                                 if tag not in stimulation.TrialPhotoStimInfo.primary_key}
         # Add entry to the trial-table
         for trial in (acquisition.TrialSet.Trial & session_key).fetch(as_dict=True):
             events = dict(zip(*(acquisition.TrialSet.EventTime & trial).fetch('trial_event', 'event_time')))
 
-            photostim_tag = (stimulation.TrialPhotoStimInfo & trial).fetch(as_dict=True)
-            trial_tag_value = {**trial, **events, **photostim_tag[0]} if len(photostim_tag) == 1 else {**trial, **photostim_tag_default}
+            trial_tag_value = {**trial, **events}
             # rename 'trial_id' to 'id'
             trial_tag_value['id'] = trial_tag_value['trial_id']
             [trial_tag_value.pop(k) for k in acquisition.TrialSet.Trial.primary_key]
@@ -160,7 +161,7 @@ for session_key in acquisition.Session.fetch('KEY'):
         os.makedirs(save_path)
     with NWBHDF5IO(os.path.join(save_path, save_file_name), mode = 'w') as io:
         io.write(nwbfile)
-        print(f'Write NWB 2.0 file: {save_file_name}')
+        print(f'\nWrite NWB 2.0 file: {save_file_name}\n')
 
 
 

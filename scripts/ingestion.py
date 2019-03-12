@@ -39,9 +39,9 @@ for meta_data_file in meta_data_files:
     # allele
     source_strain = meta_data.source_strain  # subject.Allele
     if len(source_strain) > 0:  # if found, search found string to find matched strain in db
-        allele_dict = {alias: allele for alias, allele in subject.AlleleAlias.fetch()}
+        allele_dict = {alias.lower(): allele for alias, allele in subject.AlleleAlias.fetch()}
         regex_str = '|'.join([re.escape(alias) for alias in allele_dict.keys()])
-        alleles = [allele_dict[s] for s in re.findall(regex_str, source_strain)]
+        alleles = [allele_dict[s.lower()] for s in re.findall(regex_str, source_strain, re.I)]
     else:
         alleles = ['N/A']
 
