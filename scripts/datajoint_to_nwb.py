@@ -27,7 +27,8 @@ for session_key in tqdm.tqdm(acquisition.Session.fetch('KEY')):
     nwbfile = NWBFile(
         session_description=this_session['session_note'],
         identifier='_'.join([this_session['subject_id'],
-                             this_session['session_time'].strftime('%Y-%m-%d')]),
+                             this_session['session_time'].strftime('%Y-%m-%d'),
+                             this_session['session_id']]),
         session_start_time=this_session['session_time'],
         file_create_date=datetime.now(tzlocal()),
         experimenter='; '.join((acquisition.Session.Experimenter & session_key).fetch('experimenter')),
