@@ -129,4 +129,3 @@ class TrialSet(dj.Imported):
             self.EventTime.insert((dict(key, trial_event=k, event_time=v)
                                        for k, v in event_dict.items()),
                                       ignore_extra_fields=True)
-

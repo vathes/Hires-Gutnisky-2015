@@ -93,7 +93,7 @@ class ActionLocation(dj.Manual):
     coordinate_dv: decimal(4,2)    # in mm, always postive, number larger when more ventral (deeper)
     """
  
-   
+
 @schema
 class AnimalSource(dj.Lookup):
     definition = """
@@ -162,3 +162,4 @@ class TrialResponse(dj.Lookup):
     trial_response: varchar(32)
     """
     contents = zip(['Hit', 'Miss', 'CR', 'FA', 'N/A'])
+
