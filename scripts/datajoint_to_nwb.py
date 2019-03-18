@@ -53,7 +53,7 @@ for session_key in tqdm.tqdm(acquisition.Session.fetch('KEY')):
             name=cell['cell_id'],
             device=whole_cell_device,
             description='N/A',
-            filtering='low-pass: 10kHz',  # TODO: not in pipeline
+            filtering='N/A',  # TODO: not in pipeline
             location='; '.join([f'{k}: {str(v)}'
                                 for k, v in dict((reference.BrainLocation & cell).fetch1(),
                                                  depth=cell['recording_depth']).items()]))
