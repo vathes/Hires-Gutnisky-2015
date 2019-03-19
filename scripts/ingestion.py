@@ -136,7 +136,7 @@ for meta_data_file in meta_data_files:
         reference.ActionLocation.insert1(action_location, ignore_extra_fields=True, skip_duplicates=True)
 
         # -- Device
-        stim_device = 'laser'  # hard-coded here..., could not find a more specific name from metadata
+        stim_device = 'laser'  # hard-coded here, could not find a more specific name from metadata
         stimulation.PhotoStimDevice.insert1({'device_name': stim_device}, skip_duplicates=True)
 
         # -- PhotoStimulationInfo
@@ -162,14 +162,13 @@ for meta_data_file in meta_data_files:
             virus=meta_data.virus.virus_name,
             virus_lot_number=meta_data.virus.virus_lot_number if meta_data.virus.virus_lot_number.size != 0 else '',
             virus_titer=meta_data.virus.titer.replace('x10', '') if len(meta_data.virus.titer) > 0 else None)
-
         virus.Virus.insert1(virus_info, skip_duplicates=True)
 
+        # -- BrainLocation
         brain_location = {'brain_region': meta_data.virus.atlas_location.split(' ')[0],
                           'brain_subregion': meta_data.virus.virus_coord_location,
                           'cortical_layer': 'N/A',
                           'hemisphere': hemisphere}
-        # -- BrainLocation
         reference.BrainLocation.insert1(brain_location, skip_duplicates=True)
 
         virus_injection = dict(
@@ -183,29 +182,3 @@ for meta_data_file in meta_data_files:
                                      for depth, vol in zip(meta_data.virus.depth, meta_data.virus.volume)],
                                     ignore_extra_fields=True, skip_duplicates=True)
         print(f'\tInsert Virus Injections - Count: {len(meta_data.virus.depth)}')
-
-
-
-# ========================================================================
-
-# =========================== NOT INGESTED ==========================
-# source_gene_copy = meta_data.source_gene_copy  # probably  reference.SourceStrain (not implemented)
-# source_transgene = meta_data.source_transgene  # not sure
-#
-# fiber = meta_data.fiber  # empty
-# manipulation_type = meta_data.manipulation_type  # not sure
-# onsetLatency = meta_data.onsetLatency  # not sure
-# weight_after_experiment = meta_data.weight_after_experiment  # action.Weighing
-# weight_before_experiment = meta_data.weight_before_experiment  # action.Weighing
-# whisker = meta_data.whisker  # reference.Whisker
-#
-# extracellular = meta_data.extracellular if 'extracellular' in meta_data._fieldnames else None
-# ground_location = meta_data.extracellular.ground_location  # not sure
-# identification_method = meta_data.extracellular.identification_method  # not sure
-# nth_time_accessing_tissue = meta_data.extracellular.nth_time_accessing_tissue
-# recording_location_marker = meta_data.extracellular.recording_location_marker  # not sure
-# recording_type = meta_data.extracellular.recording_type  # not sure
-# ref_loc = meta_data.extracellular.ref_loc  # not sure
-#
-# injection_pattern = meta_data.virus.injection_pattern  # empty         # action.VirusInjection
-# task_keyword = meta_data.behaviorInfo.task_keyword

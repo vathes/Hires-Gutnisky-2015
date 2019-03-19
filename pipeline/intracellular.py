@@ -143,8 +143,7 @@ class TrialSegmentedSpikeTrain(dj.Computed):
             'event', 'pre_stim_duration', 'post_stim_duration')
         # get raw
         spk, timestamps = (SpikeTrain & key).fetch1('spike_train', 'spike_timestamps')
-
-        # Limit to insert size of 15 per insert
+        # Limit insert batch size
         insert_size = utilities.insert_size
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 

@@ -88,8 +88,7 @@ class TrialSegmentedBehavior(dj.Computed):
         behavior = (Behavior & key).fetch1()
         [behavior.pop(k) for k in Behavior.primary_key]
         timestamps = behavior.pop('behavior_timestamps')
-
-        # Limit to insert size of 15 per insert
+        # Limit insert batch size
         insert_size = utilities.insert_size
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 
