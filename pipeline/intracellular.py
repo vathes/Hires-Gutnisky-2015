@@ -15,6 +15,7 @@ from . import reference, utilities, acquisition, analysis
 
 schema = dj.schema(dj.config.get('database.prefix', '') + 'intracellular')
 
+data_dir = dj.config['custom'].get('data_directory')
 
 @schema
 class Cell(dj.Manual):
@@ -39,13 +40,10 @@ class MembranePotential(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Intracellular import failed: ({key["subject_id"]} - {key["session_time"]})')
-
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
             sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
         ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix * time_conversion_factor
@@ -70,20 +68,24 @@ class SpikeTrain(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Intracellular import failed: ({key["subject_id"]} - {key["session_time"]})')
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
             sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
-        ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix * time_conversion_factor
+        ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix[1, :] * time_conversion_factor
         time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
 
-        key['spike_train'] = (ephys_data[1, :]
-                              if not isinstance(ephys_data[1, :], sparse.csc_matrix)
-                              else np.asarray(ephys_data[1, :].todense()).flatten())
+        # Account for 10ms whisker trial time offset in SAH recordings and different time format between SAH & JY recordings.
+        if sess_data_file.as_posix().find('JY'):
+            ephys_data = np.hstack([ephys_data[5:], [0, 0, 0, 0, 0]])
+        elif sess_data_file.as_posix().find('AH'):
+            ephys_data = np.hstack([ephys_data[4:], [0, 0, 0, 0]])
+
+        key['spike_train'] = (ephys_data
+                              if not isinstance(ephys_data, sparse.csc_matrix)
+                              else np.asarray(ephys_data.todense()).flatten())
         key['spike_timestamps'] = time_stamps
 
         self.insert1(key)

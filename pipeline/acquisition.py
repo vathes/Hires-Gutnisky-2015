@@ -77,13 +77,11 @@ class TrialSet(dj.Imported):
         """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             print(f'Trial import failed for session: {key["session_id"]}')
             return
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
         key['trial_counts'] = len(sess_data.trialIds)
         self.insert1(key)
 

@@ -36,19 +36,20 @@ class Behavior(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Behavioral data import failed for session: {key["session_id"]}')
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
+        # time_conversion_factor = utilities.time_unit_conversion_factor[
+        #     sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
 
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
-            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
-        behavior_data = sess_data.timeSeriesArrayHash.value[0].valueMatrix
-        time_stamps = sess_data.timeSeriesArrayHash.value[0].time * time_conversion_factor
+            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
+        time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
 
-        key['behavior_timestamps'] = time_stamps
+        key['behavior_timestamps'] = time_stamps[::10]
+
+        behavior_data = sess_data.timeSeriesArrayHash.value[0].valueMatrix
 
         behavioral_keys = ['theta_at_base', 'amplitude', 'phase', 'set_point', 'theta_filt',
                            'delta_kappa', 'touch_onset', 'touch_offset', 'distance_to_pole',

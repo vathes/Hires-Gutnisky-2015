@@ -25,8 +25,9 @@ class TrialSegmentationSetting(dj.Lookup):
     pre_stim_duration: decimal(4,2)  # (s) pre-stimulus duration
     post_stim_duration: decimal(4,2)  # (s) post-stimulus duration
     """
-    contents = [[0, 'trial_start', 0, 4],
-                [1, 'first_lick', 1, 4]]
+    contents = [[0, 'trial_start', 0, 4.9],
+                [1, 'first_lick', 1, 4],
+                [2, 'pole_in', 0.5, 3]]
 
 
 @schema
