@@ -76,7 +76,12 @@ def perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_du
         fs = 1/np.median(np.diff(timestamps))
         # check if pre/post stim dur is within start/stop time, if not, pad with NaNs
         trial_start, trial_stop = (acquisition.TrialSet.Trial & trial_key).fetch1('start_time', 'stop_time')
+        print(event_name)
+        print(trial_start)
+        print(trial_stop)
+        print(event_time_point)
         event_time_point = event_time_point + trial_start
+        print(event_time_point)
 
         pre_stim_nan_count = 0
         post_stim_nan_count = 0
@@ -89,11 +94,20 @@ def perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_du
 
         segmented_data = data[np.logical_and((timestamps >= (event_time_point - pre_stim_dur)),
                                              (timestamps <= (event_time_point + post_stim_dur)))]
+        segmented_timestamps = timestamps[np.logical_and((timestamps >= (event_time_point - pre_stim_dur)),
+                                                         (timestamps <= (event_time_point + post_stim_dur)))]
+        del data, timestamps
+        print(pre_stim_nan_count)
+        print(post_stim_nan_count)
+        print(segmented_timestamps.shape)
+
         # pad with NaNs
         segmented_data = np.hstack((np.full(pre_stim_nan_count, np.nan), segmented_data,
                                     np.full(post_stim_nan_count, np.nan)))
+        segmented_timestamps = np.hstack((np.full(pre_stim_nan_count, np.nan), segmented_timestamps,
+                                          np.full(post_stim_nan_count, np.nan)))
 
-        return segmented_data
+        return segmented_data, segmented_timestamps
 
 
 def get_event_time(event_name, key, return_exception=False):
