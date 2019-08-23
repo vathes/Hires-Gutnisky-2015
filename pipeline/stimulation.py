@@ -91,7 +91,7 @@ class TrialSegmentedPhotoStimulus(dj.Computed):
         try:
             key['segmented_photostim'] = analysis.perform_trial_segmentation(key, event_name, pre_stim_dur,
                                                                              post_stim_dur, photostim_timeseries,
-                                                                             fs, first_time_point)[0]
+                                                                             fs, first_time_point)
         except analysis.EventChoiceError as e:
             print(f'Trial segmentation error - Msg: {str(e)}')
             return

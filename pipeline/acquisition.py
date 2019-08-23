@@ -94,7 +94,6 @@ class TrialSet(dj.Imported):
             sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
         pole_in_times = sess_data.trialPropertiesHash.value[1] * trial_time_conversion_factor
         pole_out_times = sess_data.trialPropertiesHash.value[2] * trial_time_conversion_factor
-        lick_times = sess_data.trialPropertiesHash.value[3] * trial_time_conversion_factor
         time_stamps = sess_data.timeSeriesArrayHash.value[1].time * ephys_time_conversion_factor
         touchon = sess_data.timeSeriesArrayHash.value[0].valueMatrix[6, :]
         behav_time_stamps = sess_data.timeSeriesArrayHash.value[0].time * behav_time_conversion_factor
@@ -124,7 +123,7 @@ class TrialSet(dj.Imported):
                               trial_stop=key['stop_time'] - key['start_time'],
                               pole_in=pole_in_times[idx],
                               pole_out=pole_out_times[idx],
-                              first_lick=lick_times[idx][0] if len(lick_times[idx]) > 0 else np.nan)
+                              first_lick=lick_times[0] - key['start_time'] if len(lick_times) > 0 else np.nan)
             self.EventTime.insert((dict(key, trial_event=k, event_time=v)
                                        for k, v in event_dict.items()),
                                       ignore_extra_fields=True)

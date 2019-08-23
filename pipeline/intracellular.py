@@ -100,7 +100,6 @@ class TrialSegmentedMembranePotential(dj.Computed):
     -> analysis.TrialSegmentationSetting
     ---
     segmented_mp=null: longblob   
-    segmented_mp_timestamps=null: longblob  # (s)
     """
 
     key_source = MembranePotential * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -116,11 +115,13 @@ class TrialSegmentedMembranePotential(dj.Computed):
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), utilities.insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_mp = [dict(trial_key, **dict(zip(
-                ('segmented_mp', 'segmented_mp_timestamps'),
-                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, mp, timestamps)
-                if not isinstance(analysis.get_event_time(event_name, trial_key, return_exception=True), Exception)
-                else (None, None)))) for trial_key in trials]
+            segmented_mp = [dict(trial_key,
+                                 segmented_mp=analysis.perform_trial_segmentation(trial_key, event_name,
+                                                                                  pre_stim_dur, post_stim_dur,
+                                                                                  mp, timestamps)
+                                 if not isinstance(analysis.get_event_time(event_name, trial_key,
+                                                                           return_exception=True), Exception) else None)
+                            for trial_key in trials]
             self.insert({**key, **s} for s in segmented_mp if s['segmented_mp'] is not None)
             print(f'Segmenting Membrane Potential: {b_idx * utilities.insert_size + len(trials)}/' +
                   f'{(acquisition.TrialSet & key).fetch1("trial_counts")}')
@@ -134,7 +135,6 @@ class TrialSegmentedSpikeTrain(dj.Computed):
     -> analysis.TrialSegmentationSetting
     ---
     segmented_spike_train=null: longblob
-    segmented_spike_timestamps: longblob  # (s)
     """
 
     key_source = SpikeTrain * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -150,12 +150,14 @@ class TrialSegmentedSpikeTrain(dj.Computed):
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_spk = [dict(trial_key, **dict(zip(
-                ('segmented_spike_train', 'segmented_spike_timestamps'),
-                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, spk, timestamps)
-                if not isinstance(analysis.get_event_time(event_name, trial_key, return_exception=True), Exception)
-                else (None, None)))) for trial_key in trials]
-
+            segmented_spk = [dict(trial_key,
+                                  segmented_spike_train=analysis.perform_trial_segmentation(trial_key, event_name,
+                                                                                            pre_stim_dur, post_stim_dur,
+                                                                                            spk, timestamps)
+                                  if not isinstance(analysis.get_event_time(event_name, trial_key,
+                                                                            return_exception=True), Exception)
+                                  else None)
+                             for trial_key in trials]
             self.insert({**key, **s} for s in segmented_spk if s['segmented_spike_train'] is not None)
             print(f'Segmenting SpikeTrain: {b_idx * utilities.insert_size + len(trials)}/' +
                   f'{(acquisition.TrialSet & key).fetch1("trial_counts")}')

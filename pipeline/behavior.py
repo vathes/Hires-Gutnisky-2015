@@ -9,7 +9,6 @@ import sys
 import numpy as np
 import scipy.io as sio
 import datajoint as dj
-from collections import ChainMap
 
 from . import utilities, acquisition, analysis, intracellular
 
@@ -78,7 +77,6 @@ class TrialSegmentedBehavior(dj.Computed):
     segmented_distance_to_pole=null: longblob  #
     segmented_pole_available=null: longblob  #
     segmented_beam_break_times=null: longblob  #
-    segmented_behavior_timestamps=null: longblob  # (s)
     """
 
     key_source = Behavior * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -96,12 +94,11 @@ class TrialSegmentedBehavior(dj.Computed):
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_behav = [{**trial_key, **(ChainMap(*[dict(zip(
-                (f'segmented_{k}', 'segmented_behavior_timestamps'),
-                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, v, timestamps)))
-                                                    for k, v in behavior.items()])
-                                                if not isinstance(analysis.get_event_time(event_name, trial_key,
-                                                                                          return_exception=True), Exception)
+            segmented_behav = [{**trial_key, **({('segmented_' + k): analysis.perform_trial_segmentation(
+                trial_key, event_name, pre_stim_dur, post_stim_dur, v, timestamps)
+                for k, v in behavior.items()} if not isinstance(analysis.get_event_time(event_name, trial_key,
+                                                                                        return_exception=True),
+                                                                Exception)
                                                 else dict())}
                                for trial_key in trials]
             self.insert({**key, **s} for s in segmented_behav if 'segmented_amplitude' in s)
