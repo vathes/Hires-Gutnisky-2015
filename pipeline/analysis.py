@@ -87,10 +87,11 @@ def perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_du
             post_stim_nan_count = int((event_time_point + post_stim_dur - trial_stop) * fs)
             post_stim_dur = trial_stop - event_time_point
 
-        segmented_data = data[np.logical_and((timestamps >= (event_time_point - pre_stim_dur)),
-                                             (timestamps <= (event_time_point + post_stim_dur)))]
-        segmented_timestamps = timestamps[np.logical_and((timestamps >= (event_time_point - pre_stim_dur)),
-                                                         (timestamps <= (event_time_point + post_stim_dur)))] - event_time_point
+        time_mask = np.logical_and((timestamps >= (event_time_point - pre_stim_dur)),
+                                   (timestamps <= (event_time_point + post_stim_dur)))
+
+        segmented_data = data[time_mask]
+        segmented_timestamps = timestamps[time_mask] - event_time_point
         # pad with NaNs
         segmented_data = np.hstack((np.full(pre_stim_nan_count, np.nan), segmented_data,
                                     np.full(post_stim_nan_count, np.nan)))

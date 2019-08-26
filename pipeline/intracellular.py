@@ -82,6 +82,7 @@ class SpikeTrain(dj.Imported):
             ephys_data = np.hstack([ephys_data[5:], [0, 0, 0, 0, 0]])
         elif sess_data_file.as_posix().find('AH'):
             ephys_data = np.hstack([ephys_data[4:], [0, 0, 0, 0]])
+            time_stamps = time_stamps - 0.01
 
         key['spike_train'] = (ephys_data
                               if not isinstance(ephys_data, sparse.csc_matrix)
