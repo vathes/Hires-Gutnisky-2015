@@ -119,7 +119,6 @@ class TrialSet(dj.Imported):
             key['pole_position'] = sess_data.trialPropertiesHash.value[0][idx] * 0.0992  # convert to micron here (0.0992 microns / microstep)
             self.Trial.insert1(key, ignore_extra_fields=True)
             # ======== Now add trial event timing to the EventTime part table ====
-            lick_times = behav_time_stamps[np.where(trial_idx == trial_id, touchon, 0).astype(bool)]
             event_dict = dict(trial_start=0,
                               trial_stop=key['stop_time'] - key['start_time'],
                               pole_in=pole_in_times[idx],
