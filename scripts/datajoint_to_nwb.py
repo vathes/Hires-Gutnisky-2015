@@ -17,10 +17,13 @@ import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 
 warnings.filterwarnings('ignore', module='pynwb')
-# =============================================
-# Each NWBFile represent a session, thus for every session in acquisition.Session, we build one NWBFile
 
-for session_key in tqdm.tqdm(acquisition.Session.fetch('KEY')):
+# ============================== SET CONSTANTS ==========================================
+# Each NWBFile represent a session, thus for every session in acquisition.Session, we build one NWBFile
+default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
+
+
+def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=True):
     this_session = (acquisition.Session & session_key).fetch1()
     # =============== General ====================
     # -- NWB file - a NWB2.0 file for each session
@@ -155,17 +158,27 @@ for session_key in tqdm.tqdm(acquisition.Session.fetch('KEY')):
             [trial_tag_value.pop(k) for k in acquisition.TrialSet.Trial.primary_key]
             nwbfile.add_trial(**trial_tag_value)
 
-    # =============== Write NWB 2.0 file ===============
-    save_path = os.path.join('data', 'NWB 2.0')
-    save_file_name = ''.join([nwbfile.identifier, '.nwb'])
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    with NWBHDF5IO(os.path.join(save_path, save_file_name), mode = 'w') as io:
-        io.write(nwbfile)
-        print(f'\nWrite NWB 2.0 file: {save_file_name}\n')
+        # =============== Write NWB 2.0 file ===============
+        if save:
+            save_file_name = ''.join([nwbfile.identifier, '.nwb'])
+            if not os.path.exists(nwb_output_dir):
+                os.makedirs(nwb_output_dir)
+            if not overwrite and os.path.exists(os.path.join(nwb_output_dir, save_file_name)):
+                return nwbfile
+            with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode = 'w') as io:
+                io.write(nwbfile)
+                print(f'Write NWB 2.0 file: {save_file_name}')
+
+        return nwbfile
 
 
+# ============================== EXPORT ALL ==========================================
 
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        nwb_outdir = sys.argv[1]
+    else:
+        nwb_outdir = default_nwb_output_dir
 
-
-
+    for skey in acquisition.Session.fetch('KEY'):
+        export_to_nwb(skey, nwb_output_dir=nwb_outdir, save=True)

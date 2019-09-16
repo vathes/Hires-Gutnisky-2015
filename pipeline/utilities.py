@@ -1,9 +1,8 @@
 import os
 from datetime import datetime
 import re
-
-import h5py as h5
-import numpy as np
+import datajoint as dj
+import pathlib
 
 insert_size = 10
 
@@ -14,6 +13,7 @@ time_unit_conversion_factor = {'millisecond': 1e-3,
                                'day': 86400}
 
 datetime_formats = ('%y%m%d', '%y%d%m')
+data_dir = pathlib.Path(dj.config['custom'].get('data_directory'))
 
 
 def parse_date(text):
@@ -26,23 +26,18 @@ def parse_date(text):
     raise ValueError('no valid date format found')
 
 
-def find_session_matched_matfile(sess_data_dir, sess_key):
-        sess_data_files = os.listdir(sess_data_dir)
-        # Search the filenames to find a match for "this" session (based on key)
-        sess_data_file = None
-        for s in sess_data_files:
-            if re.search(sess_key['session_id'], s):
-                sess_data_file = s
-        if sess_data_file:
-            return sess_data_file
-        else:
-            return None
+def find_session_matched_matfile(sess_key):
+    """
+    Search the filenames to find a match for "this" session (based on key)
+    """
+    sess_data_dir = data_dir / 'datafiles'
+    matched_sess_data_file = sess_data_dir.glob(f'*{sess_key["session_id"]}*.mat')
+    try:
+        return next(matched_sess_data_file)
+    except:
+        return None
 
 
-def split_list(arr, size):
-    slice_from = 0
-    while len(arr) > slice_from:
-        slice_to = slice_from + size
-        yield arr[slice_from:slice_to]
-        slice_from = slice_to
-
+def split_list(arr, chunk_size):
+    for s in range(0, len(arr), chunk_size):
+        yield arr[s:s+chunk_size]

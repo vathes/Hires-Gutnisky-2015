@@ -15,6 +15,7 @@ from . import reference, utilities, acquisition, analysis
 
 schema = dj.schema(dj.config.get('database.prefix', '') + 'intracellular')
 
+data_dir = dj.config['custom'].get('data_directory')
 
 @schema
 class Cell(dj.Manual):
@@ -39,13 +40,10 @@ class MembranePotential(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Intracellular import failed: ({key["subject_id"]} - {key["session_time"]})')
-
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
             sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
         ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix * time_conversion_factor
@@ -70,20 +68,25 @@ class SpikeTrain(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Intracellular import failed: ({key["subject_id"]} - {key["session_time"]})')
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
             sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
-        ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix * time_conversion_factor
+        ephys_data = sess_data.timeSeriesArrayHash.value[1].valueMatrix[1, :] * time_conversion_factor
         time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
 
-        key['spike_train'] = (ephys_data[1, :]
-                              if not isinstance(ephys_data[1, :], sparse.csc_matrix)
-                              else np.asarray(ephys_data[1, :].todense()).flatten())
+        # Account for 10ms whisker trial time offset in SAH recordings and different time format between SAH & JY recordings.
+        if sess_data_file.as_posix().find('JY'):
+            ephys_data = np.hstack([ephys_data[5:], [0, 0, 0, 0, 0]])
+        elif sess_data_file.as_posix().find('AH'):
+            ephys_data = np.hstack([ephys_data[4:], [0, 0, 0, 0]])
+            time_stamps = time_stamps - 0.01
+
+        key['spike_train'] = (ephys_data
+                              if not isinstance(ephys_data, sparse.csc_matrix)
+                              else np.asarray(ephys_data.todense()).flatten())
         key['spike_timestamps'] = time_stamps
 
         self.insert1(key)
@@ -98,6 +101,7 @@ class TrialSegmentedMembranePotential(dj.Computed):
     -> analysis.TrialSegmentationSetting
     ---
     segmented_mp=null: longblob   
+    segmented_mp_timestamps=null: longblob  # (s)
     """
 
     key_source = MembranePotential * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -113,13 +117,11 @@ class TrialSegmentedMembranePotential(dj.Computed):
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), utilities.insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_mp = [dict(trial_key,
-                                 segmented_mp=analysis.perform_trial_segmentation(trial_key, event_name,
-                                                                                  pre_stim_dur, post_stim_dur,
-                                                                                  mp, timestamps)
-                                 if not isinstance(analysis.get_event_time(event_name, trial_key,
-                                                                           return_exception=True), Exception) else None)
-                            for trial_key in trials]
+            segmented_mp = [dict(trial_key, **dict(zip(
+                ('segmented_mp', 'segmented_mp_timestamps'),
+                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, mp, timestamps)
+                if not isinstance(analysis.get_event_time(event_name, trial_key, return_exception=True), Exception)
+                else (None, None)))) for trial_key in trials]
             self.insert({**key, **s} for s in segmented_mp if s['segmented_mp'] is not None)
             print(f'Segmenting Membrane Potential: {b_idx * utilities.insert_size + len(trials)}/' +
                   f'{(acquisition.TrialSet & key).fetch1("trial_counts")}')
@@ -133,6 +135,7 @@ class TrialSegmentedSpikeTrain(dj.Computed):
     -> analysis.TrialSegmentationSetting
     ---
     segmented_spike_train=null: longblob
+    segmented_spike_timestamps: longblob  # (s)
     """
 
     key_source = SpikeTrain * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -143,20 +146,17 @@ class TrialSegmentedSpikeTrain(dj.Computed):
             'event', 'pre_stim_duration', 'post_stim_duration')
         # get raw
         spk, timestamps = (SpikeTrain & key).fetch1('spike_train', 'spike_timestamps')
-
-        # Limit to insert size of 15 per insert
+        # Limit insert batch size
         insert_size = utilities.insert_size
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_spk = [dict(trial_key,
-                                  segmented_spike_train=analysis.perform_trial_segmentation(trial_key, event_name,
-                                                                                            pre_stim_dur, post_stim_dur,
-                                                                                            spk, timestamps)
-                                  if not isinstance(analysis.get_event_time(event_name, trial_key,
-                                                                            return_exception=True), Exception)
-                                  else None)
-                             for trial_key in trials]
+            segmented_spk = [dict(trial_key, **dict(zip(
+                ('segmented_spike_train', 'segmented_spike_timestamps'),
+                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, spk, timestamps)
+                if not isinstance(analysis.get_event_time(event_name, trial_key, return_exception=True), Exception)
+                else (None, None)))) for trial_key in trials]
+
             self.insert({**key, **s} for s in segmented_spk if s['segmented_spike_train'] is not None)
             print(f'Segmenting SpikeTrain: {b_idx * utilities.insert_size + len(trials)}/' +
                   f'{(acquisition.TrialSet & key).fetch1("trial_counts")}')

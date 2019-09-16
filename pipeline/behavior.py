@@ -9,6 +9,7 @@ import sys
 import numpy as np
 import scipy.io as sio
 import datajoint as dj
+from collections import ChainMap
 
 from . import utilities, acquisition, analysis, intracellular
 
@@ -36,19 +37,20 @@ class Behavior(dj.Imported):
     """
 
     def make(self, key):
-        sess_data_dir = os.path.join('data', 'datafiles')
-        sess_data_file = utilities.find_session_matched_matfile(sess_data_dir, key)
+        sess_data_file = utilities.find_session_matched_matfile(key)
         if sess_data_file is None:
             raise FileNotFoundError(f'Behavioral data import failed for session: {key["session_id"]}')
+        sess_data = sio.loadmat(sess_data_file, struct_as_record = False, squeeze_me = True)['c']
+        # time_conversion_factor = utilities.time_unit_conversion_factor[
+        #     sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
 
-        sess_data = sio.loadmat(os.path.join(sess_data_dir, sess_data_file),
-                                struct_as_record = False, squeeze_me = True)['c']
         time_conversion_factor = utilities.time_unit_conversion_factor[
-            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[0].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
-        behavior_data = sess_data.timeSeriesArrayHash.value[0].valueMatrix
-        time_stamps = sess_data.timeSeriesArrayHash.value[0].time * time_conversion_factor
+            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value[1].timeUnit - 1]]  # (-1) to take into account Matlab's 1-based indexing
+        time_stamps = sess_data.timeSeriesArrayHash.value[1].time * time_conversion_factor
 
-        key['behavior_timestamps'] = time_stamps
+        key['behavior_timestamps'] = time_stamps[::10]
+
+        behavior_data = sess_data.timeSeriesArrayHash.value[0].valueMatrix
 
         behavioral_keys = ['theta_at_base', 'amplitude', 'phase', 'set_point', 'theta_filt',
                            'delta_kappa', 'touch_onset', 'touch_offset', 'distance_to_pole',
@@ -76,6 +78,7 @@ class TrialSegmentedBehavior(dj.Computed):
     segmented_distance_to_pole=null: longblob  #
     segmented_pole_available=null: longblob  #
     segmented_beam_break_times=null: longblob  #
+    segmented_behavior_timestamps=null: longblob  # (s)
     """
 
     key_source = Behavior * acquisition.TrialSet * analysis.TrialSegmentationSetting
@@ -88,17 +91,17 @@ class TrialSegmentedBehavior(dj.Computed):
         behavior = (Behavior & key).fetch1()
         [behavior.pop(k) for k in Behavior.primary_key]
         timestamps = behavior.pop('behavior_timestamps')
-
-        # Limit to insert size of 15 per insert
+        # Limit insert batch size
         insert_size = utilities.insert_size
         trial_lists = utilities.split_list((acquisition.TrialSet.Trial & key).fetch('KEY'), insert_size)
 
         for b_idx, trials in enumerate(trial_lists):
-            segmented_behav = [{**trial_key, **({('segmented_' + k): analysis.perform_trial_segmentation(
-                trial_key, event_name, pre_stim_dur, post_stim_dur, v, timestamps)
-                for k, v in behavior.items()} if not isinstance(analysis.get_event_time(event_name, trial_key,
-                                                                                        return_exception=True),
-                                                                Exception)
+            segmented_behav = [{**trial_key, **(ChainMap(*[dict(zip(
+                (f'segmented_{k}', 'segmented_behavior_timestamps'),
+                analysis.perform_trial_segmentation(trial_key, event_name, pre_stim_dur, post_stim_dur, v, timestamps)))
+                                                    for k, v in behavior.items()])
+                                                if not isinstance(analysis.get_event_time(event_name, trial_key,
+                                                                                          return_exception=True), Exception)
                                                 else dict())}
                                for trial_key in trials]
             self.insert({**key, **s} for s in segmented_behav if 'segmented_amplitude' in s)
