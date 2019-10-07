@@ -22,9 +22,7 @@ warnings.filterwarnings('ignore', module='pynwb')
 # Each NWBFile represent a session, thus for every session in acquisition.Session, we build one NWBFile
 default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
 institution = 'Janelia Research Campus'
-hardware_filter = ''
-related_publications = 'doi:10.1038/nature22324'
-ecephys_fs = 10000
+related_publications = '10.7554/eLife.06619'
 
 # experiment description and keywords - from the abstract
 experiment_description = 'Intracellular and extracellular electrophysiology recordings performed on mouse barrel cortex in object locating task, where whisker movements and contacts with object were tracked to the milisecond precision.'
@@ -97,12 +95,19 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
                        if len(behavior.Behavior & session_key) == 1
                        else None)
     if behavior_data:
-        behav_acq = pynwb.behavior.BehavioralTimeSeries(name = 'behavior')
+        behav_acq = pynwb.behavior.BehavioralTimeSeries(name='behavior')
         nwbfile.add_acquisition(behav_acq)
         [behavior_data.pop(k) for k in behavior.Behavior.primary_key]
         timestamps = behavior_data.pop('behavior_timestamps')
+
+        # get behavior data description from the comments of table definition
+        behavior_descriptions = {attr: re.search(f'(?<={attr})(.*)#(.*)',
+                                                 str(behavior.Behavior.heading)).groups()[-1].strip()
+                                 for attr in behavior_data}
+
         for b_k, b_v in behavior_data.items():
             behav_acq.create_timeseries(name=b_k,
+                                        description=behavior_descriptions[b_k],
                                         unit='a.u.',
                                         conversion=1.0,
                                         data=b_v,
@@ -119,8 +124,8 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             name='-'.join([photostim['hemisphere'], photostim['brain_region']]),
             device=stim_device,
             excitation_lambda=float((stimulation.PhotoStimulationProtocol & photostim).fetch1('photo_stim_excitation_lambda')),
-            location = '; '.join([f'{k}: {str(v)}' for k, v in
-                                  (reference.ActionLocation & photostim).fetch1().items()]),
+            location='; '.join([f'{k}: {str(v)}' for k, v in
+                                (reference.ActionLocation & photostim).fetch1().items()]),
             description=(stimulation.PhotoStimulationProtocol & photostim).fetch1('photo_stim_notes'))
         nwbfile.add_ogen_site(stim_site)
 
@@ -128,12 +133,11 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             nwbfile.add_stimulus(pynwb.ogen.OptogeneticSeries(
                 name='_'.join(['photostim_on', photostim['photostim_datetime'].strftime('%Y-%m-%d_%H-%M-%S')]),
                 site=stim_site,
-                unit = 'mW',
-                resolution = 0.0,
-                conversion = 1e-6,
-                data = photostim['photostim_timeseries'],
-                starting_time = photostim['photostim_start_time'],
-                rate = photostim['photostim_sampling_rate']))
+                resolution=0.0,
+                conversion=1e-3,
+                data=photostim['photostim_timeseries'],
+                starting_time=photostim['photostim_start_time'],
+                rate=photostim['photostim_sampling_rate']))
 
     # =============== TrialSet ====================
     # NWB 'trial' (of type dynamic table) by default comes with three mandatory attributes:
@@ -143,9 +147,11 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
     if len((acquisition.TrialSet & session_key).fetch()) == 1:
         # Get trial descriptors from TrialSet.Trial and TrialStimInfo - remove '_trial' prefix (if any)
         trial_columns = [{'name': tag.replace('trial_', ''),
-                          'description': re.sub('\s+:|\s+', ' ', re.search(
-                              f'(?<={tag})(.*)', str((acquisition.TrialSet.Trial * stimulation.TrialPhotoStimInfo).heading)).group())}
-                         for tag in acquisition.TrialSet.Trial.fetch(as_dict=True, limit=1)[0].keys()
+                          'description': re.search(
+                              f'(?<={tag})(.*)#(.*)',
+                              str((acquisition.TrialSet.Trial
+                                   * stimulation.TrialPhotoStimInfo).heading)).groups()[-1].strip()}
+                         for tag in acquisition.TrialSet.Trial.heading.names
                          if tag not in acquisition.TrialSet.Trial.primary_key + ['start_time', 'stop_time']]
 
         # Trial Events - discard 'trial_start' and 'trial_stop' as we already have start_time and stop_time
@@ -164,6 +170,8 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         for trial in (acquisition.TrialSet.Trial & session_key).fetch(as_dict=True):
             events = dict(zip(*(acquisition.TrialSet.EventTime & trial
                                 & [{'trial_event': e} for e in trial_events]).fetch('trial_event', 'event_time')))
+            # shift event times to be relative to session_start (currently relative to trial_start)
+            events = {k: v + trial['start_time'] for k, v in events.items()}
 
             trial_tag_value = {**trial, **events}
             # rename 'trial_id' to 'id'

@@ -22,18 +22,18 @@ class Behavior(dj.Imported):
     definition = """ # Behavior data
     -> acquisition.Session
     ---
-    theta_at_base=null: longblob  #
-    amplitude=null: longblob  #
-    phase=null: longblob  #
-    set_point=null: longblob  #
-    theta_filt=null: longblob  #
-    delta_kappa=null: longblob  #
-    touch_onset=null: longblob  #
-    touch_offset=null: longblob  #
-    distance_to_pole=null: longblob  #
-    pole_available=null: longblob  #
-    beam_break_times=null: longblob  #
-    behavior_timestamps=null: longblob  # (s)
+    theta_at_base=null: longblob        #  (degree) the angle of the whisker base relative to medialateral axis of the animal
+    amplitude=null: longblob            #  the amplitude of the Hilbert Transform of theta_at_base
+    phase=null: longblob                #  the phase of the Hilbert Transform of theta_at_base
+    set_point=null: longblob            #  the amplitude of the Hilbert Transform of theta_at_base
+    theta_filt=null: longblob           #  theta_at_base filtered with 6-60Hz bandpass
+    delta_kappa=null: longblob          #  the change in whisker curvature following each touch onset 
+    touch_onset=null: longblob          #  binary array of all touch onset times (1 = onset)
+    touch_offset=null: longblob         #  binary array of all touch offset times (1 = offset) 
+    distance_to_pole=null: longblob     #  (mm) the shortest distance from whisker to the pole 
+    pole_available=null: longblob       #  binary array of time when the pole is within reach of the whisker
+    beam_break_times=null: longblob     #  binary array of lick times (1 = onset of spout contact)
+    behavior_timestamps=null: longblob  #  (s)
     """
 
     def make(self, key):
