@@ -1,23 +1,22 @@
 from pipeline import (reference, subject, acquisition, stimulation, analysis, virus,
-                      intracellular, extracellular, behavior, utilities)
+                      intracellular, behavior, utilities)
 
 # ====================== Settings ======================
-prioritized_sessions = acquisition.Session()
 settings = {'reserve_jobs': True, 'suppress_errors': True, 'display_progress': False}
 
 # ====================== Starting import and compute procedure ======================
 # -- TrialSet
-acquisition.TrialSet.populate(prioritized_sessions, **settings)
+acquisition.TrialSet.populate(**settings)
 # -- Ephys
-intracellular.MembranePotential.populate(prioritized_sessions, **settings)
-intracellular.SpikeTrain.populate(prioritized_sessions, **settings)
+intracellular.MembranePotential.populate(**settings)
+intracellular.SpikeTrain.populate(**settings)
 # -- Behavioral
-behavior.Behavior.populate(prioritized_sessions, **settings)
+behavior.Behavior.populate(**settings)
 # -- Perform trial segmentation
 print('------- Perform trial segmentation -------')
 analysis.RealignedEvent.populate(**settings)
-intracellular.TrialSegmentedMembranePotential.populate(prioritized_sessions, **settings)
-intracellular.TrialSegmentedSpikeTrain.populate(prioritized_sessions, **settings)
-behavior.TrialSegmentedBehavior.populate(prioritized_sessions, **settings)
-stimulation.TrialSegmentedPhotoStimulus.populate(prioritized_sessions, **settings)
+intracellular.TrialSegmentedMembranePotential.populate(**settings)
+intracellular.TrialSegmentedSpikeTrain.populate(**settings)
+behavior.TrialSegmentedBehavior.populate(**settings)
+stimulation.TrialSegmentedPhotoStimulus.populate(**settings)
 

@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from . import reference, subject, utilities
 
-schema = dj.schema(dj.config.get('database.prefix', '') + 'acquisition')
+schema = dj.schema(dj.config['custom'].get('database.prefix', '') + 'acquisition')
 
 
 @schema

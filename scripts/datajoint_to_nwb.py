@@ -12,7 +12,7 @@ import tqdm
 import warnings
 
 from pipeline import (reference, subject, acquisition, stimulation, analysis, virus,
-                      intracellular, extracellular, behavior, utilities)
+                      intracellular, behavior, utilities)
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 
