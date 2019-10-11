@@ -1,4 +1,5 @@
-# Hire-Gutnisky-2015 - A DataJoint example
+# Hire & Gutnisky et al. 2015 - A DataJoint example
+
 This notebook presents data and results associated with the following papers:
 >Samuel Andrew Hires, Diego A Gutnisky, Jianing Yu, Daniel H O’Connor, and Karel Svoboda. "Low-noise encoding of active touch by
 layer 4 in the somatosensory cortex" (2015) eLife (http://doi.org/10.7554/eLife.06619)
