@@ -5,17 +5,15 @@ import numpy as np
 import scipy.io as sio
 import re
 from decimal import Decimal
+import pathlib
 
 import datajoint as dj
 from pipeline import (reference, subject, acquisition, stimulation, analysis, virus,
-                      intracellular, extracellular, behavior, utilities)
+                      intracellular, behavior, utilities)
 
-# Merge all schema and generate the overall ERD (then save in "/images")
-all_erd = dj.ERD(reference) + dj.ERD(subject) + dj.ERD(acquisition)
-all_erd.save('./images/all_erd.png')
 
 # ================== Dataset ==================
-data_dir = os.path.join('data')
+data_dir = pathlib.Path(dj.config['custom'].get('data_directory')).as_posix()
 meta_data_dir = os.path.join(data_dir, 'metadata')
 sess_data_dir = os.path.join(data_dir, 'datafiles')
 
@@ -24,7 +22,7 @@ meta_data_files = os.listdir(meta_data_dir)
 for meta_data_file in meta_data_files:
     print(f'-- Read {meta_data_file} --')
     meta_data = sio.loadmat(os.path.join(
-        meta_data_dir, meta_data_file), struct_as_record = False, squeeze_me=True)['meta_data']
+        meta_data_dir, meta_data_file), struct_as_record=False, squeeze_me=True)['meta_data']
 
     # ==================== subject ====================
     subject_info = dict(subject_id=meta_data.animal_ID.lower(),

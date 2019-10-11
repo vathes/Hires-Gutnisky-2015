@@ -11,7 +11,7 @@ import datajoint as dj
 
 from . import reference, subject, utilities, acquisition, analysis
 
-schema = dj.schema(dj.config.get('database.prefix', '') + 'stimulation')
+schema = dj.schema(dj.config['custom'].get('database.prefix', '') + 'stimulation')
 
 
 @schema

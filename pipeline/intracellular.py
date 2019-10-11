@@ -13,9 +13,10 @@ import datajoint as dj
 
 from . import reference, utilities, acquisition, analysis
 
-schema = dj.schema(dj.config.get('database.prefix', '') + 'intracellular')
+schema = dj.schema(dj.config['custom'].get('database.prefix', '') + 'intracellular')
 
 data_dir = dj.config['custom'].get('data_directory')
+
 
 @schema
 class Cell(dj.Manual):
