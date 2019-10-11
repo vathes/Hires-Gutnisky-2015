@@ -1,4 +1,4 @@
-# Hire & Gutnisky et al. 2015 - A DataJoint example
+# Hires, Gutnisky et al., 2015 - A DataJoint example
 
 This notebook presents data and results associated with the following papers:
 >Samuel Andrew Hires, Diego A Gutnisky, Jianing Yu, Daniel H O’Connor, and Karel Svoboda. "Low-noise encoding of active touch by
@@ -25,6 +25,9 @@ This repository will contain the Python 3.6+ code of the DataJoint data pipeline
 This repository will contain the Python 3.6+ code to convert the DataJoint pipeline into NWB 2.0 format (See https://neurodatawithoutborders.github.io/)
 
 See NWB export code [here](../scripts/datajoint_to_nwb.py)
+
+## Demonstration of the data pipeline
+Data queries and usages are demonstrated in this [Jupyter Notebook](notebooks/Hires-Gutnisky-2015-examples.ipynb), where several figures from the paper are reproduced. 
 
 ## Architecture of the data pipeline
 ![ERD of the entire data pipeline](images/all_erd.png)
